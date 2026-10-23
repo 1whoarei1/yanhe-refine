@@ -27,7 +27,7 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    allowed={'platform','id','tenant','title','teacher','term','college','code'}
    records=catalog['courses'];identities=set()
    for row in records:
-    assert set(row)<=allowed and row['platform'] in ['modern','legacy']
+    assert set(row)<=allowed and row['platform']=='modern'
     assert row['id'].isdigit() and 1<=len(row['id'])<=12 and row['title'].strip()
     key=(row['platform'],row.get('tenant','21'),row['id']);assert key not in identities;identities.add(key)
    assert catalog['counts']=={'total':len(records),'modern':sum(r['platform']=='modern' for r in records),'legacy':sum(r['platform']=='legacy' for r in records)}

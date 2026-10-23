@@ -28,6 +28,7 @@ for name in ['README.md','THIRD_PARTY_NOTICES.md']:
 if with_catalog:
  catalog=json.loads(catalog_file.read_text(encoding='utf8'));counts=catalog['counts']
  assert counts['total']==len(catalog['courses']) and catalog_file.stat().st_size<=32*1024*1024
+ assert counts['legacy']==0 and all(row['platform']=='modern' for row in catalog['courses'])
  directory=Path('课程目录');(folder/directory).mkdir()
  shutil.copy2(catalog_file,folder/directory/'课程目录.json');files.append(directory/'课程目录.json')
  instructions=f'''课程目录 · {catalog['snapshot_date']}
@@ -35,9 +36,8 @@ if with_catalog:
 在插件中打开「设置」→「导入课程表」，选择本文件夹内的「课程目录.json」。
 导入后可离线检索目录，观看仍需登录课堂。文件不会自动导入。
 
-共 {counts['total']:,} 条：新版 {counts['modern']:,} 条，旧版 {counts['legacy']:,} 条。
-全校课程界面继续只显示新版课程，旧版数据仍保留在目录中。
-同名课程的不同年份、教学班和新旧平台分别保留；这是已收集的目录快照，不代表实时课程总量。
+共 {counts['total']:,} 条新版课程。
+同名课程的不同年份、教学班分别保留；这是已收集的目录快照，不代表实时课程总量。
 
 仅含课程 ID、平台、名称、教师、学期、学院、课程代码等课程元数据。
 不含登录信息、选课关系、收藏、观看进度、成绩、作业或视频地址。

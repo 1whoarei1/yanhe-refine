@@ -13,9 +13,10 @@ const source=JSON.parse(await readFile(input,'utf8'));
 const raw=Array.isArray(source)?source:source.courses;
 if(!Array.isArray(raw))throw new Error('Missing course list');
 const clean=value=>String(value??'').normalize('NFC').replace(/[\x00-\x1f\x7f\u200b-\u200d\ufeff]/g,' ').replace(/\s+/g,' ').trim();
-const mapped=new Map();let invalid=0,duplicates=0;
+const mapped=new Map();let invalid=0,duplicates=0,excludedLegacy=0;
 for(const item of raw){
  const normalized=normalizeCourse(item);if(!normalized){invalid++;continue;}
+ if(normalized.platform!=='modern'){excludedLegacy++;continue;}
  // Public metadata only. Never copy arbitrary source fields or browser records.
  const row={platform:normalized.platform,id:normalized.id,title:clean(normalized.title),teacher:clean(normalized.teacher),term:clean(normalized.term),college:clean(normalized.college),code:clean(normalized.code)};
  if(normalized.tenant!=='21')row.tenant=normalized.tenant;
@@ -31,4 +32,4 @@ const header={schema:1,snapshot_date:date,counts};
 const bytes=Buffer.from(JSON.stringify(header).slice(0,-1)+',"courses":[\n'+courses.map(c=>JSON.stringify(c)).join(',\n')+'\n]}\n');
 if(bytes.length>32*1024*1024)throw new Error('Catalogue exceeds the extension import limit');
 await mkdir(dirname(output),{recursive:true});await writeFile(output,bytes);
-console.log(JSON.stringify({file:output,...counts,invalid,duplicates,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));
+console.log(JSON.stringify({file:output,...counts,invalid,duplicates,excludedLegacy,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')}));

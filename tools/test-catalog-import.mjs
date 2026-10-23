@@ -9,6 +9,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const version=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
 const extension=join(root,'dist','yanhe-refine-'+version),catalog=join(extension,'课程目录','课程目录.json');
 const expected=JSON.parse(await readFile(catalog,'utf8')).counts;
+assert.equal(expected.legacy,0,'public import catalogue must contain modern courses only');
 const temp=await mkdtemp(join(tmpdir(),'yanhe-catalog-test-')),report={version,network:'blocked',checks:[]};
 let context;
 try{
@@ -30,7 +31,7 @@ try{
  await page.getByRole('searchbox',{name:'搜索课程、教师或链接'}).fill('110118');await page.getByRole('searchbox',{name:'搜索课程、教师或链接'}).press('Enter');
  await page.locator('[data-course-key="modern:21:110118"]').waitFor();
  assert.equal(await page.locator('[data-course-key^="legacy:"]').count(),0);
- report.checks.push('import survives reload and school-wide offline search uses modern records while retaining legacy identities');
+ report.checks.push('import survives reload, offline school-wide search works and no legacy course is imported');
  await page.getByRole('link',{name:'设置',exact:true}).click();await page.locator('#import-state').waitFor();
  await page.screenshot({path:join(root,'test-results','catalog-import.png'),fullPage:true});
  assert.deepEqual(errors,[]);report.ok=true;
