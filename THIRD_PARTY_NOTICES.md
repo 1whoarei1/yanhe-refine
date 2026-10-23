@@ -1,0 +1,30 @@
+# References and third-party notices
+
+Yanhe Desk's own code is MIT licensed. Bundled dependencies retain their licenses.
+
+## Inherited player and protocol references
+
+- [1whoarei1/yanhe-replay](https://github.com/1whoarei1/yanhe-replay): the bundled `watch/` component is a snapshot of the local 0.3.1 development version, with embedded layout changes. MIT notice is included in the root LICENSE.
+- [windlandneko/yanhekit](https://github.com/windlandneko/yanhekit): reference for the modern platform's course traversal, transcripts and playback signing. Initial reference revision: `a85de3ab6b0dfad6b4440775a6057ccab2881270`. Its Python scripts and skill files are not bundled or relicensed here.
+- [lankerr/BIT_yanhe_download_2026](https://github.com/lankerr/BIT_yanhe_download_2026), especially `utils.py`, and its upstream [BITNP/BIT_yanhe_download](https://github.com/BITNP/BIT_yanhe_download): legacy protocol references. Copyright 2023 AuYang261 MIT notice is included in `licenses/BIT_yanhe_download.LICENSE`.
+
+Thank you to the authors and maintainers for publishing their research and tools.
+
+## Runtime components
+
+| Component | Version | Purpose | Included license |
+| --- | --- | --- | --- |
+| hls.js | 1.7.3 | HLS playback | Apache-2.0, `watch/vendor/hls.LICENSE` |
+| mpegts.js | 1.8.2 | FLV playback | Apache-2.0, `watch/vendor/mpegts.LICENSE` and `mpegts.NOTICE.txt` |
+| JavaScript-MD5 | 2.19.0 | Signing | MIT, `watch/vendor/md5.LICENSE` |
+| fflate | 0.8.3 | XLSX ZIP container | MIT, `licenses/fflate.LICENSE` |
+| saxes | 6.0.0 | XLSX XML parsing | ISC, `licenses/saxes.LICENSE`, including inherited sax and historical notices |
+| xmlchars | 2.2.0 | XML characters used by saxes | MIT, `licenses/xmlchars.LICENSE` |
+
+The saxes 6.0.0 npm archive omits its license file; the original notice is copied from the upstream [v6.0.0 LICENSE](https://github.com/lddubeau/saxes/blob/v6.0.0/LICENSE). Browser runtime libraries are included locally; no external script CDN is used.
+
+## Development tools
+
+esbuild 0.28.2 (MIT) and Playwright 1.62.1 (Apache-2.0) are development dependencies, not bundled runtime code. FFmpeg generates synthetic media for tests; it is not bundled and its license depends on the installed build. Python/openpyxl are used locally for catalogue preparation only.
+
+The personal course index is user-provided data, excluded from the public package and the code license. The code license does not grant redistribution rights to course content.

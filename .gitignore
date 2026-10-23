@@ -1,0 +1,9 @@
+node_modules/
+dist/
+test-results/
+local-data/
+extension/
+tools/update-loaded.py
+__pycache__/
+*.log
+*.zip

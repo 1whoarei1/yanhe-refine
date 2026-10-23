@@ -1,0 +1,17 @@
+{
+  "name": "yanhe-desk",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "延河学习台：课程、直录播、资料与待办。",
+  "license": "MIT",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node tools/browser-test.mjs",
+    "catalog": "python tools/prepare-catalog.py",
+    "package": "python tools/package.py"
+  },
+  "dependencies": { "fflate": "0.8.3", "saxes": "6.0.0" },
+  "devDependencies": { "esbuild": "0.28.2", "playwright": "1.62.1" }
+}

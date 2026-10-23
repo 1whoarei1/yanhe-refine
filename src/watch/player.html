@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>延河回放助手</title><link rel="stylesheet" href="player.css"><link rel="stylesheet" href="lyrics.css"></head>
+<body>
+  <header class="topbar"><div class="brand"><img src="icons/32.png" width="30" height="30" alt=""><strong>延河回放助手</strong></div><a id="site-link" href="https://aita.yanhekt.cn/" target="_blank" rel="noreferrer">延河课堂 / 登录</a></header>
+  <main>
+    <form id="course-form" class="course-form"><label for="course-input">课程链接或 ID</label><select id="platform" aria-label="课程平台"><option value="modern">新版</option><option value="legacy">旧版</option></select><div class="input-row"><input id="course-input" type="text" autocomplete="off" spellcheck="false" placeholder="课程链接或 ID"><button id="load-course" class="primary" type="submit">读取课程</button></div></form>
+    <div id="message" class="notice" role="status" aria-live="polite"></div>
+    <section class="course-heading"><div><h1 id="course-title">课程回放</h1><p id="course-meta"></p></div><span id="connection" class="connection">尚未连接</span></section>
+    <div class="workspace">
+      <aside class="lecture-pane" aria-label="课程课次"><div class="pane-heading"><h2>课程课次</h2><span id="replay-count">—</span><button id="refresh-list" type="button" class="text-button" title="刷新课程列表" aria-label="刷新课程列表">刷新</button></div><div class="lecture-filters" aria-label="课次类型"><button id="filter-replay" type="button" aria-pressed="true">回放</button><button id="filter-live" type="button" aria-pressed="false">直播</button></div><div id="lecture-list" class="lecture-list"><p class="empty">暂无课程</p></div></aside>
+      <section class="watch-pane" aria-label="视频播放器">
+        <div class="watch-heading"><h2 id="lecture-title">尚未选择课次</h2><span id="duration"></span></div>
+        <div class="stage"><video id="video" controls playsinline preload="none" aria-label="课程视频"></video><div id="stage-empty" class="stage-empty"><div class="play-symbol" aria-hidden="true">▷</div><h3 id="stage-label">选择课次</h3><p id="stage-detail"></p><button id="play" class="primary" type="button" disabled>播放回放</button></div></div>
+        <div class="playback-tools"><fieldset class="view-switch"><legend class="sr-only">选择画面</legend><button id="screen" class="view-button" type="button" data-view="screen" disabled aria-pressed="false">屏幕画面</button><button id="classroom" class="view-button" type="button" data-view="classroom" disabled aria-pressed="false">教室画面</button><button id="student" class="view-button" type="button" disabled hidden aria-pressed="false">学生画面</button></fieldset><label class="caption-toggle"><input id="show-captions" type="checkbox" checked disabled>视频内字幕</label><label class="speed-label" for="speed">倍速 <select id="speed"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><button id="go-live" type="button" class="live-button" hidden disabled>回到直播</button><button id="retry" class="text-button" type="button" disabled>重新连接</button></div>
+        <div id="playback-status" class="playback-status" role="status" aria-live="polite">等待选择课次</div>
+      </section>
+      <aside class="transcript-pane" aria-label="平台字幕">
+        <div class="transcript-content">
+          <div class="pane-heading"><h2>平台字幕</h2><span id="subtitle-count">—</span></div>
+          <label class="sr-only" for="subtitle-search">搜索字幕</label>
+          <input id="subtitle-search" type="search" placeholder="搜索字幕" disabled>
+          <details id="subtitle-calibration" class="subtitle-calibration">
+            <summary>字幕时间校准 <output id="offset-summary">未偏移</output></summary>
+            <form id="offset-form"><fieldset id="offset-controls" disabled>
+              <label for="subtitle-offset">偏移秒数（＋延后 / −提前）</label>
+              <div class="offset-input-row"><input id="subtitle-offset" type="number" min="-86400" max="86400" step="0.001" value="0" required><button class="offset-apply" type="submit">应用</button></div>
+              <div class="offset-actions"><button type="button" data-offset-step="-0.5">提前 0.5 秒</button><button type="button" data-offset-step="0.5">延后 0.5 秒</button><button id="offset-reset" type="button">重置</button></div>
+              <button id="align-current" type="button" title="将对应字幕对齐到当前播放位置" aria-pressed="false" disabled>选句对齐</button><button id="cancel-align" type="button" hidden>取消</button>
+            </fieldset></form>
+            <p id="calibration-status" role="status"></p>
+          </details>
+          <div class="subtitle-mode-row"><span id="subtitle-mode">随播放滚动</span><time id="subtitle-time" aria-label="当前播放时间">0:00</time><button id="return-sync" class="text-button" type="button" hidden>回到当前句</button></div>
+          <p id="current-caption" class="subtitle-gap" role="status"></p>
+          <div class="lyrics-viewport"><div id="subtitle-list" class="subtitle-list" tabindex="0" role="region" aria-label="歌词式字幕列表"><p class="empty">暂无字幕</p></div></div>
+        </div>
+      </aside>
+    </div>
+    <footer>延河回放助手 0.3.1</footer>
+  </main>
+  <script src="vendor/md5.min.js"></script><script src="vendor/hls.light.min.js"></script><script src="vendor/mpegts.min.js"></script><script type="module" src="player.js"></script>
+</body></html>

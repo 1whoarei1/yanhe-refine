@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "延河回放助手",
+  "version": "0.3.1",
+  "description": "使用延河课堂已有登录状态，观看课程回放与新版直播，支持歌词式字幕和时间校准。",
+  "minimum_chrome_version": "120",
+  "permissions": ["cookies", "storage", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": ["https://*.yanhekt.cn/*", "https://yanhe.bit.edu.cn/*"],
+  "action": { "default_title": "打开延河回放助手", "default_icon": {"16":"icons/16.png","32":"icons/32.png"} },
+  "icons": {"16":"icons/16.png","32":"icons/32.png","48":"icons/48.png","128":"icons/128.png"},
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["https://aita.yanhekt.cn/*", "https://www.yanhekt.cn/*"],
+    "js": ["auth-content.js", "launcher.js"],
+    "css": ["launcher.css"],
+    "run_at": "document_idle"
+  }],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'self' https://*.yanhekt.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data:; style-src 'self'; base-uri 'none'; frame-ancestors 'none';"
+  }
+}
