@@ -33,5 +33,26 @@ export function materialRows(body,courseId) {
   title:text(r.title||r.name)||'课件',type:'material',url:activityUrl(courseId,r.id)})).filter(r=>/^\d{1,12}$/.test(r.id));
 }
 export function resourceRows(body) {
- return (body.uploads||[]).filter(r=>!isTrue(r.deleted)).map(r=>({name:text(r.name),size:Number(r.size)||0,type:text(r.type),download:isTrue(r.allow_download)}));
+ return (body.uploads||[]).filter(r=>!isTrue(r.deleted)).map(r=>({id:text(r.id),referenceId:text(r.reference_id),name:text(r.name),size:Number(r.size)||0,type:text(r.type),download:isTrue(r.allow_download)}));
+}
+export function homeworkDetail(row,courseId) {
+ const data=row.data||{},base=homeworkRows({homework_activities:[row]}, {},courseId)[0];
+ if(!base||String(row.course_id)!==String(courseId)||row.type!=='homework')throw new Error('作业不属于当前课程或尚未发布');
+ const unlimited=isTrue(row.non_submit_times??data.non_submit_times),limit=Number(row.submit_times??data.submit_times),used=Number(row.user_submit_count)||0;
+ const supported=data.homework_type==='file_upload'&&(!data.mode||data.mode==='normal');
+ return {...base,description:text(data.description),attachments:resourceRows(row),groupSetId:text(row.group_set_id),
+  mode:data.mode||'normal',supported,used,limit:unlimited?null:limit,
+  canSubmit:supported&&isTrue(row.is_in_progress)&&!base.closed&&(unlimited||limit>used),
+  submitReason:!supported?'此类作业请在原站完成':!isTrue(row.is_in_progress)||base.closed?'当前不在提交时间内':!unlimited&&used>=limit?'已达到提交次数上限':''};
+}
+export function submissionRows(body) {
+ if(!Array.isArray(body.list))throw new Error('未能读取提交记录');
+ return body.list.map(r=>({id:text(r.id),comment:text(r.comment),createdAt:schoolEpoch(r.created_at),draft:isTrue(r.is_draft),redo:isTrue(r.is_redo),
+  attachments:resourceRows({uploads:r.uploads||[]})}));
+}
+export function attachmentUrl(file){
+ if(file.download&&file.type==='folder'&&/^\d{1,12}$/.test(file.id))return `https://zy-eclass.bit.edu.cn/zip/uploads?timezone=-480&upload_ids=${file.id}`;
+ const ref=String(file.referenceId||'');
+ if(!file.download||!/^\d{1,12}$/.test(ref))throw new Error('该附件未开放下载');
+ return `https://zy-eclass.bit.edu.cn/api/uploads/reference/${ref}/blob`;
 }

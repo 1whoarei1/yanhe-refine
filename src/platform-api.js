@@ -48,10 +48,25 @@ export class PlatformApi extends YanheApi {
   return (Array.isArray(data)?data:[]).map(r=>normalizeCourse(r,'modern')).filter(c=>c&&!c.testCourse);
  }
  async materials(id){
-  await this.authenticate();const {data}=await this.json('/courseapi/v3/course-share-resource/get-course-resource',{course_id:id});
-  if(!Array.isArray(data))throw new Error('资料格式已变化');
-  return data.map((r,i)=>({id:text(r.id||i),title:text(r.name||r.title||r.resource_name)||'课程资料',type:'material',source:'modern',courseId:id,
-   url:`https://aita.yanhekt.cn/coursedetail?course_id=${id}&tenant_code=21`}));
+  await this.authenticate();const rows=[];
+  for(let page=1;page<=100;page++){
+   const body=await this.json('/courseapi/v3/course-share-resource/get-course-resource',{course_id:id,page,per_page:100});
+   if(!Array.isArray(body.data))throw new Error('资料格式已变化');
+   for(const r of body.data){const resourceId=text(r.resource_id&&String(r.resource_id)!=='0'?r.resource_id:r.old_resource_id),title=text(r.resource_name||r.name||r.title)||'课程资料',suffix=text(r.resource_suffix);
+    rows.push({id:text(r.id),resourceId,title,type:'material',source:'modern',courseId:String(id),
+     attachments:resourceId?[{id:resourceId,name:suffix&&!title.toLowerCase().endsWith('.'+suffix.toLowerCase())?title+'.'+suffix:title,size:Number(r.resource_size)||0,download:![false,0,'0'].includes(r.allow_download)}]:[],
+     url:`https://aita.yanhekt.cn/coursedetail?course_id=${id}&tenant_code=21`});
+   }
+   if(body.data.length<100||(Number(body.total)>0&&rows.length>=Number(body.total)))return rows;
+  }
+  throw new Error('课程资料超过 100 页，请在原站查看');
+ }
+ async materialDownload(courseId,id){
+  const row=(await this.materials(courseId)).find(r=>r.id===String(id));if(!row?.attachments[0]?.download)throw new Error('该资料未开放下载');
+  const url=new URL('/spidermaterial/spider-material/web/download/dlUrl','https://aita.yanhekt.cn');url.searchParams.set('ids',row.resourceId);
+  const response=await this.fetcher(url.href,{credentials:'include',redirect:'error',cache:'no-store',headers:{Authorization:`Bearer ${this.token}`},signal:AbortSignal.timeout(20000)});
+  if(!response.ok)throw new Error(`资料下载返回 HTTP ${response.status}`);
+  const body=await response.json();if(Number(body.state)!==200||typeof body.data!=='string')throw new Error('平台未提供附件下载地址');return {url:body.data,name:row.attachments[0].name};
  }
 }
 export class CourseSources {

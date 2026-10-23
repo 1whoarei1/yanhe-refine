@@ -1,31 +1,66 @@
-import {lmsCourses,homeworkRows,materialRows,resourceRows} from './lms-core.js';
+import {lmsCourses,homeworkRows,materialRows,resourceRows,homeworkDetail,submissionRows,published} from './lms-core.js';
+export const LMS_ORIGIN='https://zy-eclass.bit.edu.cn';
+export function numeric(value){if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');return String(value);}
 export class LmsReader {
- constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.activities=new Set();}
+ constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.activities=new Map();}
+ async response(path,options={}){
+  const response=await this.fetcher(LMS_ORIGIN+path,{credentials:'include',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(20000),...options});
+  if(!response.ok){const e=new Error(`新乐学返回 HTTP ${response.status}`);e.status=response.status;throw e;}return response;
+ }
  async get(path){
-  const response=await this.fetcher('https://zy-eclass.bit.edu.cn'+path,{credentials:'include',redirect:'error',cache:'no-store',headers:{Accept:'application/json'},signal:AbortSignal.timeout(15000)});
-  if(!response.ok)throw new Error(`新乐学返回 HTTP ${response.status}`);
+  const response=await this.response(path,{headers:{Accept:'application/json'}});
   if(!/json/i.test(response.headers.get('content-type')||''))throw new Error('请登录新乐学');
   const data=await response.json();if(data.message==='未找到资源')throw new Error('未找到课程资源');return data;
  }
- async read({kind,id,page=1}){
+ async own(courseId,force=false){numeric(courseId);if(!this.owned||force)await this.read({kind:'courses'});if(!this.owned.has(String(courseId)))throw new Error('未找到所学课程');}
+ async activity(courseId,id){
+  numeric(id);await this.own(courseId);
+  // Revalidate the course/activity relationship; never depend on a particular content-script tab.
+  const body=await this.get(`/api/course/${courseId}/courseware-activities`),rows=Array.isArray(body)?body:body.learning_activities||body.courseware_activities||body.activities||[];
+  const entry=rows.find(r=>String(r.id)===String(id)&&published(r));
+  if(!entry)throw new Error('当前课程中未找到已发布的活动');
+  this.activities.set(String(id),String(courseId));return entry;
+ }
+ async userId(courseId){
+  const html=await (await this.response(`/course/${numeric(courseId)}/content`)).text();
+  const tag=html.match(/<[^>]+\bid=["']userId["'][^>]*>/i)?.[0],id=tag?.match(/\bdata-id=["'](\d+)["']/i)?.[1];
+  if(!id)throw new Error('请在同一浏览器登录新乐学');return numeric(id);
+ }
+ async submissions(courseId,id,detail){
+  if(detail.group){
+   const {group}=await this.get(`/api/group-sets/${numeric(detail.groupSetId)}/group`);
+   if(!group?.id)return {rows:[],groupName:'',inGroup:false};
+   const body=await this.get(`/api/activities/${id}/groups/${numeric(group.id)}/submission_list`);
+   return {rows:submissionRows(body),groupName:String(group.name||'我的小组'),inGroup:true};
+  }
+  const userId=await this.userId(courseId),body=await this.get(`/api/activities/${id}/students/${userId}/submission_list`);
+  return {rows:submissionRows(body),groupName:'',inGroup:true};
+ }
+ async read({kind,id,courseId,page=1}){
   if(kind==='courses'){
    const body=await this.get('/api/my-courses');if(!Array.isArray(body.courses||body.data?.courses))throw new Error('请登录新乐学');
    const rows=lmsCourses(body);this.owned=new Set(rows.map(r=>r.id));return {rows};
   }
-  if(!/^\d{1,12}$/.test(String(id)))throw new Error('编号无效');
-  if(kind==='resources'){
-   if(!this.activities.has(String(id)))throw new Error('请先刷新课程资料');
-   return {rows:resourceRows(await this.get(`/api/activities/${id}/resources`))};
+  numeric(id);
+  if(['resources','task'].includes(kind)){
+   courseId=courseId||this.activities.get(String(id));if(!courseId)throw new Error('请先刷新课程资料');
+   const entry=await this.activity(courseId,id);
+   if(kind==='resources')return {rows:resourceRows(await this.get(`/api/activities/${id}/resources`))};
+   if(entry.type!=='homework')throw new Error('不是作业活动');
+   const detail=homeworkDetail(await this.get(`/api/activities/${id}`),courseId);
+   let history;try{history=await this.submissions(courseId,id,detail);}
+   catch{return {...detail,submissions:[],historyError:'提交记录暂未读取，请刷新后再提交',canSubmit:false,submitReason:'提交记录暂未读取，请刷新后再提交'};}
+   return {...detail,submissions:history.rows,groupName:history.groupName,canSubmit:detail.canSubmit&&history.inGroup,
+    submitReason:history.inGroup?detail.submitReason:'尚未加入作业小组'};
   }
-  if(!this.owned)await this.read({kind:'courses'});
-  if(!this.owned.has(String(id)))throw new Error('未找到所学课程');
+  await this.own(id);
   if(kind==='homework'){
    const n=Math.max(1,Math.min(100,Number(page)||1));
    const [body,status]=await Promise.all([this.get(`/api/courses/${id}/homework-activities?page=${n}`),this.get(`/api/course/${id}/homework/submission-status`).catch(()=>({}))]);
-   const rows=homeworkRows(body,status,id);rows.forEach(r=>this.activities.add(r.id));return {rows,page:Number(body.page)||n,pages:Number(body.pages)||1};
+   const rows=homeworkRows(body,status,id);rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows,page:Number(body.page)||n,pages:Number(body.pages)||1};
   }
   if(kind==='materials'){
-   const rows=materialRows(await this.get(`/api/course/${id}/courseware-activities`),id);rows.forEach(r=>this.activities.add(r.id));return {rows};
+   const rows=materialRows(await this.get(`/api/course/${id}/courseware-activities`),id);rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows};
   }
   throw new Error('不支持的读取');
  }

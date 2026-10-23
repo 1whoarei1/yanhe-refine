@@ -17,5 +17,10 @@ export class RemoteLms{
  courses=()=>request('lms',{method:'courses',args:[]});
  homeworks=id=>request('lms',{method:'homeworks',args:[id]});
  materials=id=>request('lms',{method:'materials',args:[id]});
- resources=id=>request('lms',{method:'resources',args:[id]});
+ resources=(courseId,id)=>request('lms',{method:'resources',args:[courseId,id]});
+ task=(courseId,id)=>request('lms',{method:'task',args:[courseId,id]});
+ upload=(courseId,id,file)=>request('lmsWrite',{method:'upload',args:[courseId,id,file]});
+ submit=(courseId,id,payload)=>request('lmsWrite',{method:'submit',args:[courseId,id,payload]});
 }
+export const downloadAttachment=args=>request('download',args);
+export const downloadStatus=ids=>request('downloadStatus',{ids});

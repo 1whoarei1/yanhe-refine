@@ -13,6 +13,8 @@ await cp(ext,testExt,{recursive:true});
 const testCourses=[{id:102178,title:'计算机视觉',teacher:'裴明涛',term:'2026-2027-1',platform:'modern'},...Array.from({length:20},(_,i)=>({id:70000+i,title:'计算机视觉',teacher:'裴明涛',term:'2024-2025-1',platform:'modern'})),{id:73694,title:'计算机视觉',teacher:'张老师',term:'2025-2026-1',platform:'legacy'},{id:73694,title:'计算机视觉',teacher:'裴明涛',term:'2025-2026-2',platform:'modern'}];
 const seed=JSON.stringify({courses:testCourses});await writeFile(join(testExt,'private-catalog.json'),seed);await writeFile(join(testExt,'build-info.json'),JSON.stringify({version:JSON.parse(await readFile(join(ext,'manifest.json'),'utf8')).version,catalog:{count:testCourses.length,sha256:createHash('sha256').update(seed).digest('hex')}}));
 await mkdir(output,{recursive:true});
+await mkdir(join(profile,'Default'),{recursive:true});
+await writeFile(join(profile,'Default','Preferences'),JSON.stringify({download:{default_directory:join(testRoot,'downloads'),prompt_for_download:false}}));
 const report={mode:'isolated Edge; in-site UI; synthetic catalogue, normal API fixtures and synthetic media',lectureDownloaded:false,checks:[]};
 report.checks.push=(...values)=>{console.log(...values);return Array.prototype.push.apply(report.checks,values);};
 let context,page;
@@ -21,13 +23,21 @@ async function visit(p,url){await p.goto(url,{waitUntil:'commit'}).catch(e=>{if(
 const nativeHtml='<!doctype html><html><head><meta charset=utf-8></head><body><h1>原站功能</h1><input id=original-input aria-label=原站输入><button id=native-button>原站操作</button><script>window.nativeStarted=true;document.getElementById("native-button").onclick=()=>document.getElementById("native-button").textContent="已操作";</script></body></html>';
 try{
  context=await chromium.launchPersistentContext(profile,{executablePath:process.env.BROWSER_EXECUTABLE||'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${testExt}`,`--load-extension=${testExt}`],viewport:{width:1440,height:1000}});
+ const control=await context.newCDPSession(context.pages()[0]);await control.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:join(testRoot,'downloads'),eventsEnabled:true});
  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker',{timeout:20000}),id=new URL(worker.url()).host;
+ // Keep Chromium's actual disk download + progress API; replace only the fixture URL at its boundary.
+ // Browser downloads bypass Playwright request routing, so never send these synthetic IDs to a real host.
+ await worker.evaluate(()=>{const download=chrome.downloads.download.bind(chrome.downloads);globalThis.fixtureDownloads=[];chrome.downloads.download=async options=>{
+  if(!['https://zy-eclass.bit.edu.cn/api/uploads/reference/5001/blob','https://aita.yanhekt.cn/fixture/outline.txt'].includes(options.url))throw new Error('Unexpected fixture download');
+  globalThis.fixtureDownloads.push(options);return download({...options,url:'data:text/plain;base64,c3ludGhldGljIGF0dGFjaG1lbnQ='});
+ };});
  report.browserVersion=context.browser()?.version();
- const errors=[],requests=[],unexpected=[];let offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1;
+ const errors=[],requests=[],unexpected=[];let offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1,submitted=null,submissionPosts=0;
  context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='warning')console.log(m.text());});});
  const modernToken='desk-test-opaque-0123456789',oldToken='d'.repeat(32);
  const cookie=encodeURIComponent(`a:2:{i:0;s:6:"_token";i:1;s:${modernToken.length}:"${modernToken}";}`);
  await context.addCookies([{name:'_token',value:cookie,domain:'aita.yanhekt.cn',path:'/',secure:true,httpOnly:true,sameSite:'None'}]);
+ await context.addCookies([{name:'XSRF-TOKEN',value:'fixture%20csrf',domain:'zy-eclass.bit.edu.cn',path:'/',secure:true,sameSite:'None'}]);
  const now=Date.now(),iso=t=>new Date(t).toISOString(),current={id:102178,title:'计算机视觉',realname:'裴明涛',term_name:'2026-2027-1',kkxy_name:'计算机学院',course_code:'EL3105',zhiyuan_id:20290};
  const live={id:102154,title:'强化学习',realname:'杨毅',term_name:'2026-2027-1',kkxy_name:'计算机学院'};
  const iot={id:110118,title:'人机协同的智能物联网应用设计',realname:'李海',term_name:'2026-2027-1',kkxy_name:'计算机学院'};
@@ -35,16 +45,24 @@ try{
  const liveRow={id:1630190,sub_title:'强化学习 · 第八讲',type:'course_live',playback_status:'0',sub_status:'1',class_begin:Math.floor(now/1000)-1000};
  await context.route('https://**/*',async route=>{
   const req=route.request(),u=new URL(req.url()),path=u.pathname;requests.push({host:u.hostname,path,method:req.method()});
-  assert.ok(['GET','HEAD'].includes(req.method()),'all platform activity must be read only');
+  assert.ok(['GET','HEAD'].includes(req.method())||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/fixture-upload/9001','/api/course/activities/2413/submissions'].includes(path)),'only explicit synthetic coursework writes are allowed');
   const json=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   if(u.hostname==='zy-eclass.bit.edu.cn'){
    if(lmsOffline)return route.fulfill({status:200,contentType:'text/html',body:'<html>Login</html>'});
    if(path==='/api/my-courses')return json({courses:[{id:20290,name:'计算机视觉',course_code:'EL3105',academic_year:'2026-2027',semester:1}]});
    if(path==='/api/courses/20290/homework-activities')return json({page:1,pages:1,homework_activities:[{id:5956,title:'白平衡与伽马校正',published:true,submitted:true},{id:2413,title:'相机标定',published:true,submitted:false,deadline:'2026-10-30 23:59:00'},{id:2414,title:'图像拼接（选做）',published:true,submit_by_group:true,deadline:'2026-11-04 23:59:00'},{id:9999,title:'尚未发布的题目',published:false}]});
    if(path==='/api/course/20290/homework/submission-status')return json({homework_activities:[{id:5956,status:'submitted',score:99},{id:2413,status:'absent'},{id:2414,status:'absent'},{id:9999,status:'absent'}]});
-   if(path==='/api/course/20290/courseware-activities')return json([...['课程介绍','图像增强','相机模型','house 数据集'].map((title,i)=>({id:3000+i,type:'material',title,published:true})),{id:9999,type:'homework',title:'尚未发布的题目',published:false}]);
-   if(/^\/api\/activities\/300\d\/resources$/.test(path))return json({uploads:[{name:'lecture.pdf',size:2100000,type:'application/pdf',allow_download:true},{name:'deleted.pdf',deleted:true}]});
-   if(!path.startsWith('/api/'))return route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>新乐学测试页</body></html>'});
+   if(path==='/api/course/20290/courseware-activities')return json([...['课程介绍','图像增强','相机模型','house 数据集'].map((title,i)=>({id:3000+i,type:'material',title,published:true})),...[5956,2413,2414].map(id=>({id,type:'homework',published:true})),{id:9999,type:'homework',title:'尚未发布的题目',published:false}]);
+   const attachment={id:4001,reference_id:5001,name:'lecture.txt',size:17,type:'file',allow_download:true};
+   if(/^\/api\/activities\/(300\d|2413)\/resources$/.test(path))return json({uploads:[attachment,{name:'deleted.pdf',deleted:true}]});
+   if(path==='/api/activities/2413')return json({id:2413,course_id:20290,type:'homework',title:'相机标定',published:true,is_in_progress:true,non_submit_times:true,user_submit_count:submitted?1:0,end_time:iso(now+86400000),data:{description:'<h3>实验要求</h3><p>实现相机标定并提交代码。</p><table><tr><td>输入</td><td>合成图像</td></tr></table><script>window.evilExecuted=true</script><img src="javascript:alert(1)" onerror="window.evilExecuted=true"><a href="javascript:alert(1)">坏链接</a>',homework_type:'file_upload',mode:'normal'},uploads:[attachment]});
+   if(path==='/api/activities/2413/students/7/submission_list')return json({list:submitted?[submitted]:[]});
+   if(path==='/api/uploads'&&req.method()==='POST'){assert.equal(req.headers()['x-xsrf-token'],'fixture csrf');assert.equal(req.postDataJSON().name,'answer.zip');return json({id:9001,upload_url:'/fixture-upload/9001',storage_type:'LOCAL'});}
+   if(path==='/fixture-upload/9001'&&req.method()==='PUT'){assert.match(req.headers()['content-type'],/multipart\/form-data/);assert.ok(req.postDataBuffer().includes(Buffer.from('synthetic answer')));return route.fulfill({body:''});}
+   if(path==='/api/uploads/9001')return json({id:9001,status:'ready'});
+   if(path==='/api/course/activities/2413/submissions'&&req.method()==='POST'){submissionPosts++;assert.deepEqual(req.postDataJSON().uploads,[9001]);submitted={id:9002,comment:req.postDataJSON().comment,is_draft:false,created_at:iso(now),uploads:[{...attachment,id:9001,reference_id:9003,name:'answer.zip'}]};return json({submission:{id:9002}});}
+   if(path==='/api/uploads/reference/5001/blob')return route.fulfill({contentType:'text/plain',headers:{'Content-Disposition':'attachment; filename=lecture.txt'},body:'synthetic lecture'});
+   if(!path.startsWith('/api/'))return route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>新乐学测试页<span id="userId" data-id="7"></span></body></html>'});
   }
   if(u.hostname==='www.yanhekt.cn')return route.fulfill({contentType:'text/html',body:nativeHtml});
   if(u.hostname==='cbiz.yanhekt.cn'){
@@ -58,7 +76,7 @@ try{
    if(data!==undefined)return json({code:0,data});
   }
   if(u.hostname==='aita.yanhekt.cn'){
-   if(!/^\/(userapi|courseapi|coursesourceapi|vlabpassportapi|play)\//.test(path))return route.fulfill({contentType:'text/html',body:nativeHtml});
+   if(!/^\/(userapi|courseapi|coursesourceapi|vlabpassportapi|spidermaterial|play|fixture)\//.test(path))return route.fulfill({contentType:'text/html',body:nativeHtml});
    if(path==='/userapi/v1/infosimple')return json({code:200,params:{id:123,tenant_id:21,phone:'13000001234',account:'student-fixture'}});
    if(offline&&path.startsWith('/courseapi/'))return route.fulfill({status:503,body:''});
    if(path==='/vlabpassportapi/v1/account-profile/course')return json({code:1000,params:{result:{data:[current,live,iot].map(r=>({Id:r.id,Title:r.title,Teacher:r.realname,TermName:r.term_name,kkxy_name:r.kkxy_name,zhiyuan_id:r.zhiyuan_id})),total:3}}});
@@ -68,7 +86,9 @@ try{
    if(path.endsWith('/get-my-course-day'))return json({code:0,list:{day:{course:[{...live,course_id:live.id,sub_id:1630190,course_begin:iso(now-1200000),course_over:iso(now+2400000),room_name:'中教 101',sub_status:'1'},{...current,course_id:current.id,sub_id:1600001,course_begin:iso(now+7200000),course_over:iso(now+12600000),room_name:'综教 503',sub_status:'2'}]}}});
    if(path.endsWith('/get-course-detail')){const n=Number(u.searchParams.get('course_id')),c=n===102154?live:n===110118?iot:current;return json({code:0,data:{...c,id:n,sub_list:n===102154?[liveRow]:[replay(1600001,'2026-09-22第8-9节',10),replay(1600002,'2026-09-29第8-9节',20)]}});}
    if(path.endsWith('/get-course-teacher-others'))return json({code:0,data:[{id:1042,title:'cs',realname:'超级管理员'},{...current,id:999001,term_name:'2024-2025-1'}]});
-   if(path.endsWith('/get-course-resource'))return json({code:0,data:u.searchParams.get('course_id')==='110118'?[{id:1,name:'智能物联网 · 课程大纲'}]:[]});
+   if(path.endsWith('/get-course-resource'))return json({code:0,data:u.searchParams.get('course_id')==='110118'?[{id:1,resource_id:'8001',resource_name:'智能物联网 · 课程大纲',resource_suffix:'txt',resource_size:17}]:[]});
+   if(path==='/spidermaterial/spider-material/web/download/dlUrl')return json({state:200,data:'https://aita.yanhekt.cn/fixture/outline.txt'});
+   if(path==='/fixture/outline.txt')return route.fulfill({contentType:'text/plain',headers:{'Content-Disposition':'attachment; filename=outline.txt'},body:'synthetic outline'});
    if(path.endsWith('/get-sub-info'))return json({code:0,data:u.searchParams.get('sub_id')==='1630190'?{sub_type:'course_live',sub_status:'1',sub_title:liveRow.sub_title,live_url:{output:{m3u8:'https://aita.yanhekt.cn/play/test.m3u8'},output_ppt:{m3u8:'https://aita.yanhekt.cn/play/test.m3u8'}}}:{duration:120,video_list:{screen:{type:2,status:2,preview_url:'https://aita.yanhekt.cn/play/timing.mp4'},room:{type:3,status:2,preview_url:'https://aita.yanhekt.cn/play/timing-room.mp4'}}}});
    if(path.startsWith('/coursesourceapi/course/study-auth/'))return json({code:200,data:{hasPermission:false}});
    if(path.endsWith('/search-trans-result'))return json({code:0,list:[{all_content:[{BeginSec:0,EndSec:2.9,Text:'我们先来看相机模型。'},{BeginSec:3,EndSec:5,Text:'从世界坐标映射到像素坐标。'},{BeginSec:68,EndSec:70,Text:'接下来讨论相机的内参矩阵。'},...Array.from({length:100},(_,i)=>({BeginSec:100+i*5,EndSec:104+i*5,Text:`针孔成像模型与投影变换，第 ${i+1} 个知识点。`}))]}]});
@@ -85,6 +105,7 @@ try{
  page=await context.newPage();await visit(page,'https://aita.yanhekt.cn/portal/#/');
  await page.locator('.lesson').first().waitFor({timeout:45000});assert.equal(new URL(page.url()).origin,'https://aita.yanhekt.cn');assert.equal(await page.locator('#original-input').count(),0);assert.equal(context.pages().filter(p=>p.url().startsWith('chrome-extension:')).length,0);
  report.checks.push('opening the original portal renders the new UI directly without a standalone tab or duplicate native UI');
+ assert.equal(await page.getByRole('link',{name:'旧版直播',exact:true}).count(),0);
  await page.setViewportSize({width:2560,height:1440});await page.screenshot({path:join(output,'site-today.png'),fullPage:true,timeout:10000});await page.setViewportSize({width:1440,height:1000});
  await page.getByRole('link',{name:'课程',exact:true}).first().click();await page.locator('.course-row').first().waitFor();assert.match(page.url(),/personal/);
  await page.locator('[data-course-key="modern:21:102178"] .course-title').click();assert.match(page.url(),/coursedetail\?course_id=102178/);
@@ -114,6 +135,23 @@ try{
  await page.getByRole('searchbox',{name:'搜索课程、教师或链接'}).fill('73694');await page.getByRole('searchbox',{name:'搜索课程、教师或链接'}).press('Enter');await page.locator('.course-row').first().waitFor();assert.equal(await page.locator('.course-row').count(),1);assert.match(page.url(),/searchContent/);const hrefs=await page.locator('.course-title').evaluateAll(a=>a.map(x=>x.href));assert.ok(hrefs.every(h=>!h.includes('www.yanhekt.cn')));assert.ok(hrefs.some(h=>h.startsWith('https://aita.yanhekt.cn/coursedetail?course_id=73694')));report.checks.push('school-wide discovery excludes legacy courses while keeping copyable modern links');
  await page.getByRole('link',{name:'资料',exact:true}).click();await page.locator('.material-row').first().waitFor();assert.equal(await page.locator('.material-row').count(),5);await page.getByRole('button',{name:'附件',exact:true}).first().click();await page.locator('.attachment-row').waitFor();await page.getByRole('button',{name:'关闭',exact:true}).click();
  await page.getByRole('link',{name:'待办',exact:true}).click();await page.locator('.task-row').first().waitFor();assert.equal(await page.locator('.task-row').count(),2);report.checks.push('in-site materials and tasks read through the extension bridge without exposing unpublished tasks or credentials');
+ await page.getByRole('button',{name:'相机标定',exact:true}).click();await page.getByRole('heading',{name:'实验要求',exact:true}).waitFor();
+ assert.equal(await page.locator('.rich-content script,.rich-content [onerror],.rich-content [href^="javascript:"]').count(),0);assert.equal(submissionPosts,0);
+ await page.getByRole('button',{name:'下载',exact:true}).click();await page.getByRole('button',{name:'已下载',exact:true}).waitFor({timeout:20000});
+ const downloads=await worker.evaluate(()=>chrome.downloads.search({}));assert.equal(downloads.length,1);assert.equal(downloads[0].state,'complete');assert.ok(resolve(downloads[0].filename).startsWith(resolve(testRoot)));assert.equal(await readFile(downloads[0].filename,'utf8'),'synthetic attachment');
+ await page.getByRole('textbox',{name:'作业内容',exact:true}).fill('合成作业回答 <tag>');
+ await page.getByLabel('选择作业附件').setInputFiles({name:'answer.zip',mimeType:'application/zip',buffer:Buffer.from('synthetic answer')});
+ assert.equal(requests.filter(r=>r.method==='POST'||r.method==='PUT').length,0,'selecting a local file does not upload it');
+ await page.screenshot({path:join(output,'site-task.png'),fullPage:true});await page.setViewportSize({width:375,height:900});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await page.locator('#resources-dialog').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);
+ await page.screenshot({path:join(output,'site-task-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'提交作业',exact:true}).click();await page.getByText('提交记录 · 1',{exact:true}).waitFor();assert.equal(submissionPosts,1);assert.equal(await page.locator('.submission-entry .rich-content').innerText(),'合成作业回答 <tag>');
+ assert.match(await page.locator('.submission-entry .attachment-name').innerText(),/answer\.zip/);await page.getByRole('button',{name:'关闭',exact:true}).click();
+ report.checks.push('assignment content is sanitized; selecting files does not upload; synthetic multipart upload + CSRF + receipt-checked submission work in place at desktop/mobile widths');
+ await page.getByRole('link',{name:'资料',exact:true}).click();await page.locator('.material-row').first().waitFor();await page.getByLabel('课程',{exact:true}).selectOption('lms:20290');
+ await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 1 / 1',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByLabel('课程',{exact:true}).selectOption('modern:21:110118');await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 1 / 1',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();
+ assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,3);report.checks.push('single/batch attachment downloads save synthetic bytes through Chromium, deduplicate references and support both LMS and modern resource IDs');
  await page.getByRole('link',{name:'更多',exact:true}).click();await page.getByRole('heading',{name:'更多',exact:true}).waitFor();await page.screenshot({path:join(output,'site-more.png'),fullPage:true});assert.equal(await page.getByRole('link',{name:'我的笔记',exact:true}).count(),1);
  await page.getByRole('link',{name:'我的笔记',exact:true}).click();await page.getByRole('heading',{name:'原站功能',exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.nativeStarted),true);await page.getByRole('textbox',{name:'原站输入'}).fill('保留原站操作');await page.getByRole('button',{name:'原站操作'}).click();await page.getByRole('button',{name:'已操作'}).waitFor();report.checks.push('secondary features are collected in More and their original native application still works');
  await page.getByRole('link',{name:'返回延河课堂焕新版'}).click();await page.locator('.course-row').first().waitFor();await page.getByRole('link',{name:'恢复原版',exact:true}).click();await page.getByRole('heading',{name:'原站功能',exact:true}).waitFor();assert.ok(new URL(page.url()).searchParams.has('yh_native'));report.checks.push('restore-original mode returns to the current native route without modifying account state');
@@ -123,6 +161,6 @@ try{
  legacyStatus=2;await visit(old,'https://www.yanhekt.cn/live/788579');legacyStatus=3;const endedFrame=await watchFrame(old);await endedFrame.getByText('直播已结束',{exact:true}).first().waitFor();assert.equal(await endedFrame.locator('#play').isDisabled(),true);
  await visit(old,'https://www.yanhekt.cn/session/920536');const oldReplay=await watchFrame(old);await oldReplay.waitForFunction(()=>!document.getElementById('play').disabled);await oldReplay.locator('#play').click();await oldReplay.waitForFunction(()=>document.getElementById('video').currentTime>.2);await oldReplay.locator('#video').evaluate(v=>v.pause());await visit(old,'https://www.yanhekt.cn/profile/myCourse');await old.locator('[data-course-key="legacy:21:71988"]').waitFor();report.checks.push('legacy FLV playback, ended-state handling and enrolled legacy course list are supported');await old.close();
  await visit(page,'https://aita.yanhekt.cn/coursedetail?course_id=102178&sub_id=1600001&tenant_code=21');frame=await watchFrame(page);await frame.locator('.subtitle-item').first().waitFor();await page.setViewportSize({width:375,height:900});await frame.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));await page.screenshot({path:join(output,'site-course-mobile.png'),fullPage:true});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);assert.equal(await frame.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);report.checks.push('375px in-site UI and embedded player have no horizontal overflow');
- const stored=JSON.stringify(await worker.evaluate(()=>chrome.storage.local.get(null)));assert.ok(!/desk-test-opaque|13000001234|video_fixture/.test(stored));assert.equal(await page.evaluate(()=>localStorage.getItem('desk:favorites')),null);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);report.checks.push('no page exceptions, platform writes, stored credentials or private data in the host localStorage');report.ok=true;
+ const stored=JSON.stringify(await worker.evaluate(()=>chrome.storage.local.get(null)));assert.ok(!/desk-test-opaque|13000001234|video_fixture/.test(stored));assert.equal(await page.evaluate(()=>localStorage.getItem('desk:favorites')),null);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);report.checks.push('no page exceptions, real platform writes, stored credentials or private data in the host localStorage');report.ok=true;
 }catch(error){report.ok=false;report.error=String(error.stack).replace(/https?:\/\/\S+/g,'[url]');process.exitCode=1;if(page){await page.screenshot({path:join(output,'site-failed.png'),fullPage:true}).catch(()=>{});report.visible=await page.locator('body').innerText().catch(()=>null);}}
 finally{if(context)await context.close();if(dirname(resolve(testRoot))===resolve(tmpdir())&&basename(testRoot).startsWith('yanhe-refine-test-'))await rm(testRoot,{recursive:true,force:true});await writeFile(join(output,'site-browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}
