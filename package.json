@@ -1,17 +1,25 @@
 {
-  "name": "yanhe-desk",
-  "version": "0.4.0",
+  "name": "yanhe-refine",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "延河学习台：课程、直录播、资料与待办。",
+  "description": "延河焕新：直接在延河课堂原站整合导航、课程、直录播、资料与待办。",
   "license": "MIT",
   "scripts": {
     "build": "node tools/build.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node tools/browser-test.mjs",
+    "test:browser": "node tools/site-browser-test.mjs",
+    "test:fixtures": "node tools/generate-fixtures.mjs",
     "catalog": "python tools/prepare-catalog.py",
     "package": "python tools/package.py"
   },
-  "dependencies": { "fflate": "0.8.3", "saxes": "6.0.0" },
-  "devDependencies": { "esbuild": "0.28.2", "playwright": "1.62.1" }
+  "dependencies": {
+    "blueimp-md5": "2.19.0",
+    "fflate": "0.8.3",
+    "saxes": "6.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.62.1"
+  }
 }

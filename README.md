@@ -1,71 +1,92 @@
-# Yanhe Desk · 延河学习台
+# Yanhe Refine · 延河焕新
 
-给学生用的延河课堂工作台。入口只有「今天、课程、资料、待办」，播放器位于课程内部。
+**直接重构延河课堂原网页的浏览器扩展。** 安装后照常打开延河课堂，首页、课程、回放与直播在原来的网址上呈现新界面。
 
-本地开发版 **0.4.0**，尚未发布。支持 Edge / Chrome Manifest V3。
+[开源仓库](https://github.com/1whoarei1/yanhe-refine) · **0.5.0** · Edge / Chrome Manifest V3
 
-## 已实现
+## 界面与功能
 
-- 今天：按日期查看本人课表，进入对应直播课次，继续上次回放。
-- 课程：搜索课程、教师、ID，按新旧平台、学期、学院筛选，收藏、最近观看。
-- 同师往年 / 同课老师：利用本地课程目录与平台相关课程查找往年教学班，保留新旧站独立身份。
-- 观看：嵌入原回放助手，支持 MP4、HLS、FLV、画面切换、倍速、播放进度、歌词式平台字幕和手动时间校准。
-- 资料：合并本人课堂资料和新乐学已发布课件，查看附件信息，进入原站课件。
-- 待办：读取本人新乐学课程中的已发布作业，区分未交、已交、小组及截止时间；进入原站完成操作。
-- 设置：导入 XLSX / JSON 课程目录，导入导出进度、字幕校准、收藏与课程关联。
+- **今天**：本人课表、直播入口、继续观看、近期作业。
+- **课程**：我的课程、全校检索、收藏、最近观看；按教师、学期、学院和新旧平台筛选。
+- **课程内部**：观看、同师往年、同课老师、资料与任务。原回放助手成为这里的播放组件。
+- **资料与待办**：合并课堂资料和新乐学已发布课件、作业；在原站完成作业提交等操作。
+- **更多**：集中收纳笔记、日志、小组、成绩、选听、知识图谱、智能体和帮助入口。
 
-无需本地服务，不执行 ASR，不下载整段视频，不写入作业或提交状态，不采集成绩。媒体在点击播放后才请求。
+重复的门户入口合并进主导航，次要功能移至「更多」。原站课程链接可以复制、在新标签打开，浏览器前进后退仍然有效。扩展按钮切换原版 / 焕新版，左下角也可恢复原版。
 
-## 使用
+播放组件支持 MP4、HLS、FLV、画面切换、倍速、进度记忆、歌词式平台字幕和整体时间校准。媒体仅在点击播放后请求，不执行本地 ASR，不下载整段视频。
 
-1. 解压发布包，选择直接包含 `manifest.json` 的文件夹加载扩展。
-2. 在同一浏览器个人资料中登录延河课堂；读取资料和待办还需登录新乐学。更新后刷新已打开的课堂页。
-3. 点击扩展图标，或课堂页右下角入口。完整课程、直播和课次链接可直接粘贴到搜索框。
+## 本版覆盖范围
 
-扩展管理页：Edge 为 `edge://extensions`，Chrome 为 `chrome://extensions`。开发人员模式下选择「加载解压缩的扩展」。更新现有文件夹后，点击该扩展的重新加载按钮。
+| 原站入口 | 处理方式 |
+| --- | --- |
+| 新版门户、工作台 | 重构为「今天」 |
+| 新版我的课程、课程检索、教学空间课程入口 | 整合为课程列表 |
+| 新版课程详情、回放、直播页 | 在原网址内显示课程与播放器 |
+| 旧版首页、课程列表、课程详情 | 使用统一课程界面，保留旧站课程身份 |
+| 旧版 `/live/编号`、`/session/编号`、`/ReadSession/编号` | 先解析所属课程及课次，再打开对应回放 |
+| 笔记、日志、小组、成绩等次要功能 | 从「更多」进入原站功能页 |
+| 登录、SSO 回调、新乐学作业与提交页、其它未适配路由 | 保留原站应用 |
 
-搜索纯数字会检索新旧两个命名空间；完整链接精确识别平台。旧站 `/live/<直播编号>`、`/session/<课次编号>` 会先解析所属课程，避免将直播或课次编号错作课程 ID。旧站入口用于定位所属课程及回放；直播媒体适配以新版接口为准。
+这是第一版原站内重构，尚未重写所有次要业务页面。`v0.4.0-prototype` 标签保留之前独立工作台的原型；0.5.0 的常规入口全部在原站。
 
-## 课程目录与隐私
+## 安装与更新
 
-目录属于本地索引，并非实时全校课程总量。个人构建使用用户已有的 79,564 条旧站和 27,369 条新版记录，共 106,933 条身份记录；相同课程在不同年份、教学班与平台上分别保留。新版检索结果会更新本地索引，目录无法证明某门课一定有录播或可播放。
+1. 解压发布包，在 `edge://extensions` 或 `chrome://extensions` 开启开发者模式，加载**直接包含 `manifest.json` 的文件夹**。
+2. 在同一浏览器个人资料中登录延河课堂；资料与待办还需登录新乐学。
+3. 打开或刷新延河课堂原网页。读取失败时，点击右上角登录入口进入原版登录，再切回焕新版。
 
-课程目录保存在 IndexedDB 中，收藏、进度与偏移保存在当前扩展的本地存储。原站登录凭据仅在内存中使用，记录导出采用字段白名单；无遥测与外部脚本 CDN。
+更新已加载的目录后，先在扩展管理页重新加载扩展，再刷新课堂页。保持同一加载目录可沿用现有的进度、字幕校准与收藏。
 
-- `extension/private-catalog.json`、`local-data/`、`dist/`、测试截图和个人资料均已排除出版本控制。
-- 普通发布包不含个人课程索引；个人包含用户已有索引，仅供本地使用。
-- 新乐学只读取正常账号的所学课程与已发布活动，附件读取必须先来自这些活动。
-- 课堂和新乐学以原站课程关联 ID 或用户手动关联连接，不按同名课程自动猜测。
-- 某一来源不可用时保留其它来源的结果，提交状态不可确认时不显示为「未交」。
+搜索框支持课程名称、教师、ID 或完整链接。纯数字检索新旧两个命名空间；完整链接明确指定平台。旧站直播编号与课次编号先解析，避免误当作课程 ID。当前直播适配以新版直播页为准，旧站入口用于定位课程及回放。
 
-网页许可字段与媒体服务的响应可能不同。播放器保留许可字段，实际播放仍依赖媒体服务返回的有效资源；未伪造身份、角色、许可字段或服务端结果。网络、登录、接口变化、编码和资源失效仍可能影响使用。
+## 数据与隐私
 
-## 开发与测试
+- 课程目录保存在扩展的 IndexedDB 中，进度、收藏和字幕校准保存在扩展本地存储；网页本身不保存这些记录。
+- 公共安装包不包含个人课程目录。可在设置中导入已有 XLSX / JSON，或本地生成包含目录的个人包。
+- 同一课程在不同平台、年份、教学班分别保留。目录是本地索引，不能代表实时全校课程总量，也不能证明课程必定有回放。
+- 登录凭据只用于平台请求，不进入页面界面、目录、记录导出或仓库。无遥测，无外部脚本 CDN。
+- 新乐学只读取本人课程与已发布活动，无法确认提交状态时显示待同步；不写入作业、提交状态或成绩。
+- 课程关联采用平台提供的 ID 或用户手动关联，不按同名课程自动猜测。
 
-需要 Node.js 20+；本地目录整理与打包需要 Python 3，读取现有 XLSX 的辅助脚本还需 openpyxl。
+播放器保留平台许可字段，播放仍依赖媒体服务返回的有效资源；不伪造身份、角色、许可字段或服务端结果。平台接口、登录、网络与媒体编码变化可能影响使用。
+
+## 开发与验证
+
+需要 Node.js 20+ 和 Python 3；浏览器测试另外需要安装 Edge / Chromium 以及带 libx264 的 FFmpeg。
 
 ```sh
 npm ci
 npm run build
 npm test
+npm run test:fixtures
 npm run test:browser
 python tools/package.py
-python tools/package.py --personal
+python tools/verify-packages.py
 ```
 
-源码在 `src/`；生成的 `extension/` 可直接加载。`npm run catalog` 将本机已有课程目录整理为私有种子，文件路径见 `tools/prepare-catalog.py`。不提供遍历平台课程编号的操作。
+- `src/`：源码；`extension/`：本地构建，可直接加载。
+- `src/site-routes.js`：原站网址映射和原版保留规则。
+- `src/site-entry.js`：在原页面挂载界面，保留地址与浏览器导航。
+- `src/broker.js`：扩展后台的限定读取操作与目录存储。
+- `src/watch/`：嵌入的回放 / 直播组件。
+- `BROWSER_EXECUTABLE`：测试浏览器可执行文件；`FFMPEG`：FFmpeg 可执行文件；`EXTENSION_PATH`：待验证构建目录。
 
-浏览器测试启动独立临时 Edge 个人资料，加载真实课程目录，模拟平台的普通读取接口，播放本地合成媒体。可用 `BROWSER_EXECUTABLE` 指定其它 Chromium 浏览器，`EXTENSION_PATH` 指定待验收构建；测试结果位于 `test-results/`。媒体样本沿用同级 `yanhe-replay-extension/tests/fixtures`，由其 FFmpeg 工具生成。测试不代表已经完成真实新乐学会话或真实直播长时间验收。
+浏览器测试使用独立临时浏览器资料、合成课程目录、模拟平台响应和本地合成媒体，覆盖原站接管、导航、恢复原版、登录回调、资料与待办、旧站课次解析、MP4 / HLS 播放、字幕校准及窄屏布局。不接触日常浏览器资料，不下载课堂视频。结果在 `test-results/`，不代表真实账号的全部页面或长时间直播已经验收。
+
+已有本地目录可通过 `tools/prepare-catalog.py` 整理到 `local-data/catalog.json`，脚本默认读取同级旧站 XLSX 和新版 JSON，路径可按需调整；需要 `openpyxl`。也可直接从设置导入。重新构建后，运行 `python tools/package.py --personal` 生成个人包，使用 `python tools/verify-packages.py --personal` 同时检查公共与个人包。
+
+`local-data/`、`dist/`、`extension/`、测试媒体、测试结果和个人资料均排除出版本控制。请勿公开个人安装包。
 
 ## 参考与致谢
 
-本项目在 **[1whoarei1/yanhe-replay](https://github.com/1whoarei1/yanhe-replay)** 的本地 0.3.1 播放模块上增加学生工作台。感谢以下项目作者与维护者：
+播放模块继承自 **[1whoarei1/yanhe-replay](https://github.com/1whoarei1/yanhe-replay)** 的本地 0.3.1 版本，并增加嵌入布局。感谢以下项目作者与维护者：
 
 - **[windlandneko/yanhekit](https://github.com/windlandneko/yanhekit)**：新版课程、平台字幕、媒体签名与接口使用方法的主要参考。
 - **[lankerr/BIT_yanhe_download_2026](https://github.com/lankerr/BIT_yanhe_download_2026)** 与上游 **[BITNP/BIT_yanhe_download](https://github.com/BITNP/BIT_yanhe_download)**：旧站请求头、播放路径签名和短期播放凭据参考。
-- **[video-dev/hls.js](https://github.com/video-dev/hls.js)**、**[xqq/mpegts.js](https://github.com/xqq/mpegts.js)**：浏览器 HLS / FLV 播放。
+- **[video-dev/hls.js](https://github.com/video-dev/hls.js)**、**[xqq/mpegts.js](https://github.com/xqq/mpegts.js)**：HLS / FLV 播放。
 - **[blueimp/JavaScript-MD5](https://github.com/blueimp/JavaScript-MD5)**：平台签名计算。
-- **[101arrowz/fflate](https://github.com/101arrowz/fflate)**、**[lddubeau/saxes](https://github.com/lddubeau/saxes)**：浏览器本地 XLSX 目录解析；感谢 saxes 的上游 sax 及 xmlchars。
-- **[evanw/esbuild](https://github.com/evanw/esbuild)**、**[microsoft/playwright](https://github.com/microsoft/playwright)**、**[FFmpeg](https://ffmpeg.org/)**：构建与验证。
+- **[101arrowz/fflate](https://github.com/101arrowz/fflate)**、**[lddubeau/saxes](https://github.com/lddubeau/saxes)**：本地 XLSX 解析；感谢上游 sax 与 xmlchars。
+- **[evanw/esbuild](https://github.com/evanw/esbuild)**、**[microsoft/playwright](https://github.com/microsoft/playwright)**、**[FFmpeg](https://ffmpeg.org/)**：构建和验证。
 
-具体组件版本和许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目代码采用 [MIT License](LICENSE)；课程内容和第三方组件保留各自权利。独立社区项目，与平台或学校无隶属关系。
+组件版本及许可证见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。项目代码采用 [MIT License](LICENSE)；课程内容与第三方组件保留各自权利。独立社区项目，与平台或学校无隶属关系。

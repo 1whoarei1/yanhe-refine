@@ -3,5 +3,7 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 .watch-frame{min-height:0;vertical-align:top}
 .course-mobile-meta{display:none}
+.more-groups{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:40px;max-width:1000px}.more-links{display:flex;flex-direction:column}.more-links a{padding:16px 0;border-bottom:1px solid var(--line);font-size:14px}.more-links a:hover{color:var(--blue)}.more-groups h2{margin-top:12px}.sidebar-bottom .settings-link.active{color:var(--blue);background:white}
+@media(max-width:820px){.more-groups{grid-template-columns:1fr;gap:24px}.sidebar-bottom{flex-direction:column}}
 @media(max-width:820px){.course-mobile-meta{display:inline}.course-college>span:first-child{display:none}.course-row .term{display:none}.course-row{grid-template-columns:minmax(150px,1fr) 90px 32px}}
 @media(max-width:560px){.page-heading .date-navigation{max-width:none;flex-wrap:nowrap;gap:3px}.date-navigation button{padding-inline:6px}.course-row{grid-template-columns:minmax(130px,1fr) 70px 28px}}

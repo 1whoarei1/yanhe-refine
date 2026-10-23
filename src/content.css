@@ -1,1 +1,4 @@
-#yanhe-desk-open{position:fixed;right:24px;bottom:78px;z-index:2147483646;border:1px solid #d5e1f4;border-radius:9px;background:#285ed1;color:#fff;font:13px 'Microsoft YaHei UI',sans-serif;padding:12px 17px;cursor:pointer;box-shadow:0 3px 15px #173f821f}#yanhe-desk-open:focus-visible{outline:3px solid #8fb7ff;outline-offset:3px}
+html[data-refine-pending] body{visibility:hidden!important}
+html[data-refine="active"]{margin:0!important;background:#fff!important}html[data-refine="active"] body{margin:0!important;background:#fff!important}
+#yanhe-refine-return{position:fixed;right:20px;bottom:22px;z-index:2147483640;padding:9px 14px;border:1px solid #d4dfef;border-radius:7px;background:#fff;color:#285ed1;box-shadow:0 3px 15px #20395a12;font:13px 'Microsoft YaHei UI',sans-serif;text-decoration:none}
+#yanhe-refine-return:focus-visible{outline:3px solid #94b9ff;outline-offset:3px}

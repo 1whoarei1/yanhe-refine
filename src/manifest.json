@@ -1,14 +1,15 @@
 {
  "manifest_version":3,
- "name":"延河学习台",
- "version":"0.4.0",
- "description":"学生的延河课堂：今天、全校课程、往年课程、直录播、资料与待办。",
+ "name":"延河焕新",
+ "version":"0.5.0",
+ "description":"直接重构延河课堂原站：整合导航、课程发现、直录播、平台字幕和学习资料。",
  "minimum_chrome_version":"120",
  "permissions":["cookies","storage","declarativeNetRequestWithHostAccess"],
  "host_permissions":["https://*.yanhekt.cn/*","https://yanhe.bit.edu.cn/*","https://zy-eclass.bit.edu.cn/*"],
- "action":{"default_title":"打开延河学习台","default_icon":{"16":"icons/16.png","32":"icons/32.png"}},
+ "action":{"default_title":"切换原版 / 焕新版","default_icon":{"16":"icons/16.png","32":"icons/32.png"}},
  "icons":{"16":"icons/16.png","32":"icons/32.png","48":"icons/48.png","128":"icons/128.png"},
  "background":{"service_worker":"background.js","type":"module"},
- "content_scripts":[{"matches":["https://aita.yanhekt.cn/*","https://www.yanhekt.cn/*","https://zy-eclass.bit.edu.cn/*"],"js":["content.js"],"css":["content.css"],"run_at":"document_idle"}],
- "content_security_policy":{"extension_pages":"script-src 'self'; worker-src 'self'; object-src 'none'; connect-src 'self' https://*.yanhekt.cn https://zy-eclass.bit.edu.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data:; style-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'self';"}
+ "content_scripts":[{"matches":["https://aita.yanhekt.cn/*","https://www.yanhekt.cn/*"],"js":["site-preload.js"],"css":["content.css"],"run_at":"document_start"},{"matches":["https://aita.yanhekt.cn/*","https://www.yanhekt.cn/*","https://zy-eclass.bit.edu.cn/*"],"js":["content.js"],"run_at":"document_end"}],
+ "web_accessible_resources":[{"resources":["watch/*","watch/vendor/*","watch/icons/*"],"matches":["https://aita.yanhekt.cn/*","https://www.yanhekt.cn/*"]}],
+ "content_security_policy":{"extension_pages":"script-src 'self'; worker-src 'self'; object-src 'none'; connect-src 'self' https://*.yanhekt.cn https://zy-eclass.bit.edu.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data:; style-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'self' https://aita.yanhekt.cn https://www.yanhekt.cn;"}
 }

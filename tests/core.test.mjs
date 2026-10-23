@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {normalizeCourse,searchCourses,relatedCourses,termLabel} from '../src/catalog-core.js';
 import {lmsCourses,homeworkRows,materialRows,schoolEpoch} from '../src/lms-core.js';
 import {LmsReader} from '../src/lms-reader.js';
+import {existsSync} from 'node:fs';
 import {safeRecords} from '../src/records.js';
 
 test('the same numeric ID on two platforms remains two distinct courses',()=>{
@@ -71,7 +72,7 @@ test('record transfer retains progress and calibration while rejecting credentia
  assert.equal(saved['progress:102178:1600001'].time,90);assert.equal(saved['subtitleOffset:legacy:71988:920536:200:classroom'].seconds,22);assert.equal(saved['desk:mappings']['modern:21:102178'],'20290');assert.deepEqual(saved['desk:favorites'],['modern:21:102178']);assert.ok(!JSON.stringify(saved).includes('secret'));
  assert.throws(()=>safeRecords(null),/格式/);
 });
-test('XLSX import reads every one of the 79,564 supplied old-site rows',async()=>{
+test('XLSX import reads every one of the 79,564 supplied old-site rows',{skip:!existsSync(new URL('../../延河课堂-全部课程信息.xlsx',import.meta.url))},async()=>{
  globalThis.self={};const {readXlsx}=await import('../src/catalog-worker.js');
  const bytes=await readFile(new URL('../../延河课堂-全部课程信息.xlsx',import.meta.url));
  const records=readXlsx(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));

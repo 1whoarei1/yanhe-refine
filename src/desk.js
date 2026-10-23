@@ -1,29 +1,28 @@
-import {CourseSources} from './platform-api.js';
-import {LmsClient} from './lms-client.js';
 import {courseKey,normalizeCourse,matchesCourse} from './catalog-core.js';
 import {explain} from './watch/core.js';
 import {safeRecords} from './records.js';
 
-const $=id=>document.getElementById(id),main=$('content');
-const sources=new CourseSources(),lms=new LmsClient();
-class Catalog {
- constructor(){this.worker=new Worker(chrome.runtime.getURL('catalog-worker.js'),{type:'module'});this.pending=new Map();this.next=0;
-  this.worker.onmessage=({data})=>{const job=this.pending.get(data.id);if(!job)return;if(data.progress!=null){job.progress?.(data.progress);return;}this.pending.delete(data.id);data.error?job.reject(new Error(data.error)):job.resolve(data.result);};}
- call(type,args={},progress){return new Promise((resolve,reject)=>{const id=++this.next;this.pending.set(id,{resolve,reject,progress});this.worker.postMessage({id,type,args},args.buffer?[args.buffer]:[]);});}
-}
-const catalog=new Catalog();
-const state={epoch:0,stats:{count:0,terms:[],colleges:[]},favorites:new Set(),mappings:{},my:null,lms:null,tasks:new Map(),materials:new Map(),details:new Map(),diagnostics:[],date:dayKey(),lastSearch:'#/courses',version:'0.4.0',refresh:false};
-let toastTimer;
+import {RemoteCatalog,RemoteSources,RemoteLms} from './remote-client.js';
+import {nativeHref} from './site-routes.js';
+import iconMarkup from './ui-icons.svg';
+
+export function startDesk({root=document,currentRoute=()=>location.hash.slice(1)||'/today',navigate,hrefForRoute=value=>value,site=false}={}){
+const $=id=>root.querySelector('#'+id),main=$('content');
+const sources=new RemoteSources(),lms=new RemoteLms(),catalog=new RemoteCatalog();
+const symbols=new DOMParser().parseFromString(iconMarkup,'image/svg+xml');
+
+const state={epoch:0,stats:{count:0,terms:[],colleges:[]},favorites:new Set(),mappings:{},my:null,lms:null,tasks:new Map(),materials:new Map(),details:new Map(),diagnostics:[],date:dayKey(),lastSearch:'#/courses',version:'0.5.0',refresh:false};
+let toastTimer;const cleanups=[];
 function toast(value){$('toast').textContent=value;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3200);}
 function diagnostic(name,error){const message=explain(error);state.diagnostics.unshift(`${name}：${message}`);state.diagnostics=state.diagnostics.slice(0,20);return message;}
-function node(tag,attrs={},...children){const el=document.createElement(tag);for(const [k,v]of Object.entries(attrs)){if(v==null)continue;if(k==='class')el.className=v;else if(k==='onclick'||k==='onchange'||k==='onsubmit'||k==='oninput')el.addEventListener(k.slice(2),v);else if(k==='text')el.textContent=v;else el.setAttribute(k,String(v));}for(const c of children.flat(Infinity))if(c!=null)el.append(typeof c==='string'||typeof c==='number'?document.createTextNode(String(c)):c);return el;}
-function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),use=document.createElementNS(svg.namespaceURI,'use');svg.setAttribute('aria-hidden','true');use.setAttribute('href',`ui-icons.svg#${name}`);svg.append(use);return svg;}
-function link(label,href,cls=''){return node('a',{href,class:cls,...(href.startsWith('https:')?{target:'_blank',rel:'noreferrer'}:{})},label);}
+function node(tag,attrs={},...children){const el=document.createElement(tag);for(const [k,v]of Object.entries(attrs)){if(v==null)continue;if(k==='class')el.className=v;else if(k==='onclick'||k==='onchange'||k==='onsubmit'||k==='oninput')el.addEventListener(k.slice(2),v);else if(k==='text')el.textContent=v;else el.setAttribute(k,k==='href'&&String(v).startsWith('#/')?hrefForRoute(v):String(v));}for(const c of children.flat(Infinity))if(c!=null)el.append(typeof c==='string'||typeof c==='number'?document.createTextNode(String(c)):c);return el;}
+function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),symbol=symbols.getElementById(name);svg.setAttribute('aria-hidden','true');svg.setAttribute('viewBox',symbol?.getAttribute('viewBox')||'0 0 24 24');if(symbol)svg.append(...Array.from(symbol.childNodes).map(n=>n.cloneNode(true)));return svg;}
+function link(label,href,cls=''){if(site&&/^https:\/\/(aita|www)\.yanhekt\.cn/.test(href))href=nativeHref(href);return node('a',{href,class:cls,...(href.startsWith('https:')?{target:site&&/yanhekt\.cn/.test(href)?'_self':'_blank',rel:'noreferrer'}:{})},label);}
 function button(label,action,cls='',attrs={}){return node('button',{type:'button',class:cls,onclick:action,...attrs},label);}
 function loading(label='正在读取…'){return node('div',{class:'loading'},label);}
 function empty(label,actions=[]){return node('div',{class:'empty'},label,actions.length?node('div',{class:'inline-tools'},actions):null);}
-function route(){const raw=location.hash.slice(1)||'/today';const [path,query='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(query)};}
-function go(hash){if(location.hash===hash)void render();else location.hash=hash;}
+function route(){const raw=currentRoute();const [path,query='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(query)};}
+function go(hash,replace=false){if(navigate){navigate(hash,replace);return;}if(location.hash===hash)void render();else if(replace)location.replace(hash);else location.hash=hash;}
 function routeTo(course,tab='watch',sub){return `#/course/${course.platform}/${course.id}?tab=${tab}${sub?'&sub='+encodeURIComponent(sub):''}`;}
 function heading(title,sub,tools=[]){return node('div',{class:'page-heading'},node('div',{},node('h1',{},title),sub?node('p',{class:'muted'},sub):null),node('div',{class:'heading-tools'},tools));}
 function tabs(items,active){return node('div',{class:'tabs',role:'tablist'},items.map(([id,label,href])=>node('a',{href,role:'tab','aria-selected':id===active?'true':'false',class:id===active?'active':''},label)));}
@@ -63,7 +62,7 @@ async function todayPage(epoch){
 function courseHash(values){const p=new URLSearchParams(values);return '#/courses'+(p.size?'?'+p.toString():'');}
 async function coursesPage(epoch,params){
  const scope=params.get('scope')||'my',q=params.get('q')||'',platform=params.get('platform')||'all',term=params.get('term')||'',teacher=params.get('teacher')||'',college=params.get('college')||'',page=Math.max(1,Number(params.get('page'))||1);
- state.lastSearch=location.hash||'#/courses';if(document.activeElement!==$('global-query'))$('global-query').value=q;
+ state.lastSearch='#'+currentRoute();if((root.activeElement||document.activeElement)!==$('global-query'))$('global-query').value=q;
  const values={scope,q,platform,term,teacher,college};const change=(name,value)=>go(courseHash({...values,[name]:value,page:1}));
  const filter=node('div',{class:'filters'},select('平台',[['all','全部平台'],['modern','新版'],['legacy','旧版']],platform,v=>change('platform',v)),select('学期',[['','全部学期'],...state.stats.terms.map(t=>[t,t])],term,v=>change('term',v)),select('学院',[['','全部学院'],...state.stats.colleges.map(t=>[t,t])],college,v=>change('college',v)));
  const results=node('div',{},loading()),caption=node('div',{class:'list-heading'},node('span',{},'课程'),node('span',{},''));
@@ -116,7 +115,8 @@ async function coursePage(epoch,platform,id,params){
   const src=new URL(chrome.runtime.getURL('watch/player.html'));src.searchParams.set(platform==='legacy'?'legacy':'course',id);src.searchParams.set('embedded','1');
   const sub=params.get('sub');if(sub&&/^\d{1,12}$/.test(sub)){if(platform==='legacy'){src.searchParams.delete('legacy');src.searchParams.set('legacy_session',sub);}else src.searchParams.set('sub_id',sub);}
   const frame=node('iframe',{src:src.href,class:'watch-frame',title:'课程播放器',allow:'fullscreen','allowfullscreen':''});
-  frame.addEventListener('load',()=>{try{const body=frame.contentDocument.body;const resize=()=>{frame.style.height=Math.ceil(body.getBoundingClientRect().height+2)+'px';};new frame.contentWindow.ResizeObserver(resize).observe(body);resize();}catch(e){diagnostic('播放器布局',e);}});area.append(frame);
+  const controller=new AbortController();cleanups.push(()=>controller.abort());
+  window.addEventListener('message',event=>{if(event.source===frame.contentWindow&&event.origin===new URL(chrome.runtime.getURL('')).origin&&event.data?.type==='REFINE_PLAYER_SIZE'&&Number.isFinite(event.data.height)&&event.data.height>=200&&event.data.height<=4000)frame.style.height=event.data.height+'px';},{signal:controller.signal});area.append(frame);
  }else area.append(loading());
  try{course=await detailCourse(platform,id);if(epoch!==state.epoch)return;head();}catch(e){diagnostic('课程详情',e);if(tab!=='watch'&&epoch===state.epoch&&!course.teacher){area.replaceChildren(empty('连接课堂',loginActions(platform)));return;}}
  if(epoch!==state.epoch)return;
@@ -182,25 +182,34 @@ async function settingsPage(epoch){
  const section=node('div',{class:'settings'},setting('课程目录',`旧版 ${state.stats.legacy.toLocaleString()}　新版 ${state.stats.modern.toLocaleString()}`,[node('span',{id:'import-state',class:'muted'},`${state.stats.count.toLocaleString()} 门`),button('导入课程表',()=>input.click()),input]),
   setting('学习记录','播放进度、字幕校准与收藏',[button('导出',()=>void exportRecords()),button('导入',()=>records.click()),records]),
   setting('连接',[state.my?'课堂已连接':'课堂未连接',state.lms?'新乐学已连接':'新乐学未连接'].join('　'),[link('延河课堂','https://aita.yanhekt.cn/portal/#/','button-link'),link('旧版','https://www.yanhekt.cn/','button-link'),link('新乐学','https://zy-eclass.bit.edu.cn/user/courses#/','button-link')]),
-  setting('时间','课表与截止时间使用北京时间',[]),setting('延河学习台',state.version,[link('项目参考','https://github.com/1whoarei1/yanhe-replay','text-button')]),
+  setting('时间','课表与截止时间使用北京时间',[]),setting('延河焕新',state.version,[link('项目仓库','https://github.com/1whoarei1/yanhe-refine','text-button')]),
   node('details',{},node('summary',{},'诊断'),node('pre',{},state.diagnostics.length?state.diagnostics.join('\n'):'暂无错误')));
  setPage(epoch,heading('设置',''),section);
 }
 
-async function openReference(params){let value;if(params.has('legacy_live'))value='https://www.yanhekt.cn/live/'+params.get('legacy_live');else if(params.has('legacy_session'))value='https://www.yanhekt.cn/session/'+params.get('legacy_session');else value=params.get('url');const ref=await sources.resolve(value);go(`#/course/${ref.legacy?'legacy':'modern'}/${ref.id}?tab=watch`+(ref.sessionId||ref.subId?'&sub='+encodeURIComponent(ref.sessionId||ref.subId):''));}
-async function render(){const epoch=++state.epoch,{parts,params}=route(),page=parts[0]||'today';document.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===(page==='course'||page==='open'?'courses':page)));main.replaceChildren(loading());try{
- if(page==='today')await todayPage(epoch);else if(page==='courses')await coursesPage(epoch,params);else if(page==='course')await coursePage(epoch,parts[1],parts[2],params);else if(page==='tasks'||page==='materials')await learningPage(epoch,page,params);else if(page==='settings')await settingsPage(epoch);else if(page==='open')await openReference(params);else go('#/today');
+function morePage(epoch){
+ const groups=[['学习',[
+  ['我的笔记','https://aita.yanhekt.cn/personal/#/myStudy/myNote'],['学习日志','https://aita.yanhekt.cn/personal/#/myStudy/myLog'],['我的小组','https://aita.yanhekt.cn/personal/#/myStudy/myTeam'],['我的成绩','https://aita.yanhekt.cn/personal/#/myStudy/myScore'],['课堂任务','https://aita.yanhekt.cn/personal/#/myStudy/myTask'],['选听课程','https://aita.yanhekt.cn/personal/#/myStudy/myCourse'],['原站收藏','https://aita.yanhekt.cn/personal/#/myStudy/myFavorites']]],
+  ['发现',[['知识图谱','https://aita.yanhekt.cn/graph?tenant_code=21'],['课程智能体','https://agent.bit.edu.cn/product/llm/mall/application']]],
+  ['原站',[['新乐学','https://zy-eclass.bit.edu.cn/user/courses#/'],['新版门户','https://aita.yanhekt.cn/portal/#/'],['旧版课堂','https://www.yanhekt.cn/home'],['帮助中心','https://aita.yanhekt.cn/play/0/default/helpcenter/downloads.html']]]];
+ setPage(epoch,heading('更多',''),node('div',{class:'more-groups'},groups.map(([title,entries])=>node('section',{},node('h2',{},title),node('div',{class:'more-links'},entries.map(([label,url])=>link(label,url)))))));
+}
+
+async function openReference(params){let value;if(params.has('legacy_live'))value='https://www.yanhekt.cn/live/'+params.get('legacy_live');else if(params.has('legacy_session'))value='https://www.yanhekt.cn/session/'+params.get('legacy_session');else value=params.get('url');const ref=await sources.resolve(value);go(`#/course/${ref.legacy?'legacy':'modern'}/${ref.id}?tab=watch`+(ref.sessionId||ref.subId?'&sub='+encodeURIComponent(ref.sessionId||ref.subId):''),true);}
+async function render(){cleanups.splice(0).forEach(fn=>fn());const epoch=++state.epoch,{parts,params}=route(),page=parts[0]||'today';root.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===(page==='course'||page==='open'?'courses':page)));main.replaceChildren(loading());try{
+ if(page==='today')await todayPage(epoch);else if(page==='courses')await coursesPage(epoch,params);else if(page==='course')await coursePage(epoch,parts[1],parts[2],params);else if(page==='tasks'||page==='materials')await learningPage(epoch,page,params);else if(page==='settings')await settingsPage(epoch);else if(page==='more')morePage(epoch);else if(page==='open')await openReference(params);else go('#/today');
  }catch(e){diagnostic('界面',e);setPage(epoch,empty(explain(e),[link('返回课程','#/courses','button-link')]));}finally{state.refresh=false;}}
 $('global-search').addEventListener('submit',async event=>{event.preventDefault();const value=$('global-query').value.trim();if(/^https:\/\//i.test(value)||/^\[[^\]]+\]\(https:/.test(value)){try{const ref=await sources.resolve(value);go(`#/course/${ref.legacy?'legacy':'modern'}/${ref.id}?tab=watch`+(ref.sessionId||ref.subId?'&sub='+encodeURIComponent(ref.sessionId||ref.subId):''));}catch(e){toast(diagnostic('链接',e));}}else go(courseHash({scope:'all',q:value}));});
 $('refresh').addEventListener('click',()=>{state.refresh=true;state.my=null;state.lms=null;state.details.clear();void render();});
 $('close-dialog').addEventListener('click',()=>$('resources-dialog').close());
-document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();$('global-query').focus();$('global-query').select();}});
-window.addEventListener('hashchange',()=>void render());
+root.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();$('global-query').focus();$('global-query').select();}});
+if(!site)window.addEventListener('hashchange',()=>void render());
 window.addEventListener('pagehide',()=>{catalog.worker.terminate();sources.reset();});
 async function start(){try{
- const [stats,prefs,info]=await Promise.all([catalog.call('init'),chrome.storage.local.get(['desk:favorites','desk:mappings','desk:seed']),fetch(chrome.runtime.getURL('build-info.json')).then(r=>r.json())]);
- state.stats=stats;state.favorites=new Set(prefs['desk:favorites']||[]);state.mappings=prefs['desk:mappings']||{};state.version=info.version;
- if(info.catalog&&prefs['desk:seed']!==info.catalog.sha256){main.replaceChildren(loading('正在整理课程目录…'));const response=await fetch(chrome.runtime.getURL('private-catalog.json'));if(response.ok){state.stats=await catalog.call('import',{name:'catalog.json',buffer:await response.arrayBuffer()});await chrome.storage.local.set({'desk:seed':info.catalog.sha256});}}
+ const [stats,prefs]=await Promise.all([catalog.call('init'),chrome.storage.local.get(['desk:favorites','desk:mappings'])]);
+ state.stats=stats;state.favorites=new Set(prefs['desk:favorites']||[]);state.mappings=prefs['desk:mappings']||{};state.version=chrome.runtime.getManifest().version;
  await render();
  }catch(e){diagnostic('启动',e);main.replaceChildren(empty(explain(e),[button('重试',()=>location.reload())]));}}
 void start();
+return {render};
+}

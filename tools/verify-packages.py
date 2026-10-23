@@ -1,10 +1,11 @@
 from pathlib import Path
-import hashlib,json,zipfile
+import hashlib,json,zipfile,sys
 
 root=Path(__file__).resolve().parents[1]
 report=[]
-for personal in (False,True):
- name='yanhe-desk-0.4.0'+('-personal' if personal else '')
+expected=json.loads((root/'src/manifest.json').read_text(encoding='utf8'))
+for personal in ([False,True] if '--personal' in sys.argv else [False]):
+ name='yanhe-refine-'+expected['version']+('-personal' if personal else '')
  folder=root/'dist'/name
  archive=folder.parent/(name+'.zip')
  with zipfile.ZipFile(archive) as z:
@@ -14,13 +15,13 @@ for personal in (False,True):
   assert all(not n.startswith(('/', '../')) and '..' not in Path(n).parts for n in names)
   assert ('private-catalog.json' in names)==personal
   manifest=json.loads(z.read('manifest.json'))
-  assert manifest['version']=='0.4.0' and manifest['name']=='延河学习台'
+  assert manifest==expected
   info=json.loads(z.read('build-info.json'))
   assert bool(info['catalog'])==personal
   if personal:
    seed=z.read('private-catalog.json')
    assert hashlib.sha256(seed).hexdigest()==info['catalog']['sha256']
-   assert len(json.loads(seed)['courses'])==106933
+   assert len(json.loads(seed)['courses'])==info['catalog']['count']
   for n in names:
    assert z.read(n)==(folder/n).read_bytes(),n
   for n in ['README.md','THIRD_PARTY_NOTICES.md','LICENSE','licenses/fflate.LICENSE','licenses/saxes.LICENSE','licenses/xmlchars.LICENSE','licenses/BIT_yanhe_download.LICENSE','watch/vendor/hls.LICENSE','watch/vendor/md5.LICENSE','watch/vendor/mpegts.LICENSE','watch/vendor/mpegts.NOTICE.txt']:

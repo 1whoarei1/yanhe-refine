@@ -7,11 +7,11 @@ import {deflateSync} from 'node:zlib';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),src=join(root,'src'),out=join(root,'extension');
 await mkdir(out,{recursive:true});
 for(const name of ['desk.html','desk.css','ui-icons.svg','manifest.json','content.css'])await copyFile(join(src,name),join(out,name));
-for(const [input,output,format]of [['desk.js','desk.js','esm'],['background.js','background.js','esm'],['catalog-worker.js','catalog-worker.js','esm'],['content.js','content.js','iife'],['redirect.js','redirect.js','esm']])
- await build({entryPoints:[join(src,input)],outfile:join(out,output),bundle:true,format,platform:'browser',target:'chrome120',legalComments:'linked',sourcemap:false,minify:false});
+for(const [input,output,format]of [['standalone.js','desk.js','esm'],['background.js','background.js','esm'],['catalog-worker.js','catalog-worker.js','esm'],['content.js','content.js','iife'],['site-preload.js','site-preload.js','iife'],['redirect.js','redirect.js','esm']])
+ await build({entryPoints:[join(src,input)],outfile:join(out,output),bundle:true,format,platform:'browser',target:'chrome120',loader:{'.html':'text','.css':'text','.svg':'text'},legalComments:'linked',sourcemap:false,minify:false});
 async function copyTree(from,to){await mkdir(to,{recursive:true});for(const entry of await readdir(from,{withFileTypes:true})){const a=join(from,entry.name),b=join(to,entry.name);if(entry.isDirectory())await copyTree(a,b);else await copyFile(a,b);}}
 await copyTree(join(src,'watch'),join(out,'watch'));
-await writeFile(join(out,'player.html'),'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>延河学习台</title><script type="module" src="redirect.js"></script></html>');
+await writeFile(join(out,'player.html'),'<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>延河课堂</title><script type="module" src="redirect.js"></script></html>');
 const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8')),info={version:pkg.version,catalog:null};
 try{const data=await readFile(join(root,'local-data/catalog.json'));const count=JSON.parse(data).courses.length;info.catalog={count,sha256:createHash('sha256').update(data).digest('hex')};await writeFile(join(out,'private-catalog.json'),data);}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(join(out,'build-info.json'),JSON.stringify(info,null,2));

@@ -1,6 +1,6 @@
 # References and third-party notices
 
-Yanhe Desk's own code is MIT licensed. Bundled dependencies retain their licenses.
+Yanhe Refine's own code is MIT licensed. Bundled dependencies retain their licenses.
 
 ## Inherited player and protocol references
 

@@ -55,7 +55,7 @@ export class PlatformApi extends YanheApi {
  }
 }
 export class CourseSources {
- constructor(){this.modern=new PlatformApi();this.legacy=new LegacyYanheApi();}
+ constructor(options={}){this.modern=new PlatformApi(options);this.legacy=new LegacyYanheApi(options);}
  async resolve(value,platform){const ref=parseCourse(value,platform);return ref.legacy?this.legacy.resolve(ref):ref;}
  async detail(platform,id){
   if(platform==='modern')return this.modern.detail(id);

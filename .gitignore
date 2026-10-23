@@ -1,6 +1,7 @@
 node_modules/
 dist/
 test-results/
+tests/fixtures/
 local-data/
 extension/
 tools/update-loaded.py

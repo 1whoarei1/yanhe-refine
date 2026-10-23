@@ -5,6 +5,10 @@ import { liveLabels, liveEdge } from './live-core.js';
 
 const $ = id => document.getElementById(id);
 document.body.classList.toggle('embedded',new URLSearchParams(location.search).get('embedded')==='1');
+if(document.body.classList.contains('embedded')&&parent!==window){
+ const origin=location.ancestorOrigins?.[0]||new URL(chrome.runtime.getURL('')).origin;
+ if([new URL(chrome.runtime.getURL('')).origin,'https://aita.yanhekt.cn','https://www.yanhekt.cn'].includes(origin))new ResizeObserver(()=>parent.postMessage({type:'REFINE_PLAYER_SIZE',height:Math.ceil(document.body.getBoundingClientRect().height+2)},origin)).observe(document.body);
+}
 const video = $('video');
 let api = new YanheApi();
 const state = { course: null, selected: null, info: null, view: 'screen', subtitles: [], controller: null,

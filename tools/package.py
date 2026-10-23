@@ -3,8 +3,13 @@ import json,zipfile,sys,shutil
 root=Path(__file__).resolve().parents[1]
 source=root/'extension';manifest=json.loads((source/'manifest.json').read_text(encoding='utf8'))
 personal='--personal' in sys.argv
-name=f'yanhe-desk-{manifest["version"]}'+('-personal' if personal else '')
-folder=root/'dist'/name;folder.mkdir(parents=True,exist_ok=True)
+if personal and not json.loads((source/'build-info.json').read_text(encoding='utf8'))['catalog']:
+ raise SystemExit('A personal package requires local-data/catalog.json. Build the public package without --personal.')
+name=f'yanhe-refine-{manifest["version"]}'+('-personal' if personal else '')
+folder=(root/'dist'/name).resolve()
+assert folder.parent==(root/'dist').resolve() and folder.name==name
+if folder.exists():shutil.rmtree(folder)
+folder.mkdir(parents=True)
 files=[]
 for file in source.rglob('*'):
  if not file.is_file():continue

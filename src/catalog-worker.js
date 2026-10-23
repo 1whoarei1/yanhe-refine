@@ -42,7 +42,7 @@ async function saveRecords(records,replace=false){
  await transaction('readwrite',tx=>{const store=tx.objectStore('courses');if(replace)store.clear();for(const r of records)store.put(mapped.get(r.key));tx.objectStore('meta').put(Date.now(),'updatedAt');});
  rows=[...mapped.values()];return stats();
 }
-async function perform(type,args,progress){
+export async function perform(type,args={},progress=()=>{}){
  if(type==='init')return load();
  if(type==='stats')return stats();
  if(type==='search')return searchCourses(rows,args);
@@ -58,4 +58,5 @@ async function perform(type,args,progress){
  throw new Error('未知操作');
 }
 let queue=Promise.resolve();
-self.onmessage=({data})=>{queue=queue.then(async()=>{const {id,type,args={}}=data;try{const result=await perform(type,args,count=>self.postMessage({id,progress:count}));self.postMessage({id,result});}catch(e){self.postMessage({id,error:e.message||'操作失败'});}});};
+export function catalogOperation(type,args={}){const next=queue.then(()=>perform(type,args));queue=next.catch(()=>{});return next;}
+if(typeof WorkerGlobalScope!=='undefined'&&self instanceof WorkerGlobalScope&&typeof ServiceWorkerGlobalScope==='undefined')self.onmessage=({data})=>{queue=queue.then(async()=>{const {id,type,args={}}=data;try{const result=await perform(type,args,count=>self.postMessage({id,progress:count}));self.postMessage({id,result});}catch(e){self.postMessage({id,error:e.message||'操作失败'});}});};
