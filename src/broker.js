@@ -10,7 +10,7 @@ async function catalogReady(){
   if(info.catalog&&(saved['desk:seed']!==info.catalog.sha256||!stats.count)){const response=await fetch(chrome.runtime.getURL('private-catalog.json'));if(response.ok){stats=await catalogOperation('import',{name:'catalog.json',buffer:await response.arrayBuffer()});await chrome.storage.local.set({'desk:seed':info.catalog.sha256});}}
   return stats;
  })().catch(e=>{ready=null;throw e;});
- await ready;return catalogOperation('stats');
+ await ready;
 }
 const numeric=value=>{if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');};
 export function trustedReader(sender){return sender.id===chrome.runtime.id&&(sender.url?.startsWith(chrome.runtime.getURL(''))||Boolean(sender.tab&&isPlatformPage(sender.url)));}
@@ -22,6 +22,7 @@ export async function readOperation(operation,args={}){
   if(type==='import'){if(typeof data.encoded!=='string'||data.encoded.length>45000000)throw new Error('目录文件过大');const raw=atob(data.encoded),bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);return catalogOperation(type,{name:String(data.name),buffer:bytes.buffer});}
   return catalogOperation(type,data);
  }
+ if(operation==='legacy'&&args.method==='enrolled')return sources.enrolledLegacy();
  if(operation==='modern'){
   const methods=['enrolled','search','today','otherTeacherCourses','materials'];if(!methods.includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的课堂读取');
   if(['otherTeacherCourses','materials'].includes(args.method))numeric(args.args[0]);

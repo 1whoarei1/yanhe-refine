@@ -1,6 +1,6 @@
 import { YanheApi } from './api.js';
 import { mediaUrl } from './core.js';
-import { LEGACY_API,LEGACY_ORIGIN,legacyHeaders,legacyToken,legacySignedUrl,legacyReplays,legacyStreams,parseLegacyCaptions } from './legacy-core.js';
+import { LEGACY_API,LEGACY_ORIGIN,legacyHeaders,legacyToken,legacySignedUrl,legacyReplays,legacyStreams,legacyLive,legacyLiveSignedUrl,parseLegacyCaptions } from './legacy-core.js';
 
 export class LegacyYanheApi extends YanheApi {
   constructor(options={}) { super(options); this.videoToken=null;this.videoExpiry=0;this.videoFlight=null;this.lectures=new Map(); }
@@ -16,7 +16,7 @@ export class LegacyYanheApi extends YanheApi {
     return body;
   }
   async authenticate({signal,force=false}={}) {
-    if(!force&&this.profile&&Date.now()-this.authAt<240000){await this.prepareMedia(signal);return;}
+    if(!force&&this.profile&&Date.now()-this.authAt<240000){return;}
     this.reset();
     const pages=await this.tabs?.query({url:[LEGACY_ORIGIN+'/*']}) || [];
     const results=await Promise.allSettled(pages.slice(0,8).map(page=>this.tabs.sendMessage(page.id,{type:'READ_LEGACY_AUTH'},{frameId:0})));
@@ -25,7 +25,7 @@ export class LegacyYanheApi extends YanheApi {
     for(const token of candidates){
       signal?.throwIfAborted();this.token=token;
       const body=await this.json('/v1/user',{}, {signal});
-      if(body.data?.id!=null){this.profile={id:body.data.id,badge:body.data.badge};this.authAt=Date.now();await this.prepareMedia(signal);return;}
+      if(body.data?.id!=null){this.profile={id:body.data.id,badge:body.data.badge};this.authAt=Date.now();return;}
     }
     this.reset();throw new Error('旧站登录已失效，请重新登录旧站。');
   }
@@ -53,7 +53,14 @@ export class LegacyYanheApi extends YanheApi {
     if (new Set(courseIds).size!==1) throw new Error('旧站返回的所属课程信息不一致，请使用课程详情链接。');
     const sessionIds=(ref.liveId?[data?.session_id,data?.session?.id]:[data?.id,ref.sessionId]).filter(valid).map(String);
     if (new Set(sessionIds).size>1) throw new Error('旧站返回的课次信息不一致，请使用课程详情链接。');
-    return {id:courseIds[0],legacy:true,...(sessionIds.length?{sessionId:sessionIds[0]}:{})};
+    return {id:courseIds[0],legacy:true,...(ref.liveId?{liveId:ref.liveId}:{}),...(sessionIds.length?{sessionId:sessionIds[0]}:{})};
+  }
+  async liveCourse(ref,signal){
+    await this.authenticate({signal});
+    const {data}=await this.json('/v1/live',{id:ref.liveId,with_session:true,with_course:true},{signal});
+    if(!data?.id||String(data.id)!==String(ref.liveId))throw new Error('旧版直播不存在');
+    const info=legacyLive(data);
+    return {id:ref.id,legacy:true,title:String(data.course?.name_zh||data.title||'旧版直播'),teacher:String(data.session?.professor?.name||''),term:'',replays:[],lives:[{id:'live:'+ref.liveId,title:info.title,start:info.start,mode:info.mode}]};
   }
   async course(id,signal) {
     await this.authenticate({signal});
@@ -65,7 +72,9 @@ export class LegacyYanheApi extends YanheApi {
       term:[course.data.school_year,course.data.semester].filter(Boolean).join('-'),replays:rows.map(({video,...row})=>row)};
   }
   async lecture(courseId,subId,signal) {
-    await this.authenticate({signal});const video=this.lectures.get(subId);
+    await this.authenticate({signal});
+    if(/^live:\d{1,12}$/.test(subId)){const {data}=await this.json('/v1/live',{id:subId.slice(5),with_session:true,with_course:true},{signal});if(!data||String(data.course_id||data.course?.id)!==String(courseId))throw new Error('直播课程信息不一致');return legacyLive(data);}
+    const video=this.lectures.get(subId);
     if(!video)throw new Error('未找到旧站视频，请重新读取课程。');return legacyStreams(video);
   }
   async subtitles(subId,signal) {
@@ -79,5 +88,5 @@ export class LegacyYanheApi extends YanheApi {
     if(!response.ok)throw new Error(`旧站字幕返回 HTTP ${response.status}。`);
     const rows=parseLegacyCaptions(await response.text());if(!rows.length)throw new Error('旧站字幕尚非受支持的 VTT/SRT 格式。');return rows;
   }
-  sign(url){return legacySignedUrl(url,this.videoToken,this.hash);}
+  sign(url){return legacyLiveSignedUrl(url,this.videoToken,this.hash);}
 }

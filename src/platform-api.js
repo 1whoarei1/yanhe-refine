@@ -56,6 +56,16 @@ export class PlatformApi extends YanheApi {
 }
 export class CourseSources {
  constructor(options={}){this.modern=new PlatformApi(options);this.legacy=new LegacyYanheApi(options);}
+ async enrolledLegacy(){
+  await this.legacy.authenticate();const rows=[];
+  for(let page=1;page<=30;page++){
+   const {data}=await this.legacy.json('/v2/course/private/list',{page,page_size:100,user_relationship_type:1});
+   if(!Array.isArray(data?.data))throw new Error('旧版我的课程格式已变化');
+   rows.push(...data.data.map(r=>normalizeCourse({id:r.id,title:r.name_zh,teacher:(r.professors||[]).map(p=>p.name).filter(Boolean).join('、'),term:[r.school_year,r.semester].filter(Boolean).join('-')},'legacy')).filter(Boolean));
+   if(!data.data.length||page>=Number(data.last_page)||rows.length>=Number(data.total))return rows;
+  }
+  throw new Error('旧版课程列表过长');
+ }
  async resolve(value,platform){const ref=parseCourse(value,platform);return ref.legacy?this.legacy.resolve(ref):ref;}
  async detail(platform,id){
   if(platform==='modern')return this.modern.detail(id);

@@ -10,9 +10,10 @@ export function siteRoute(raw){
  if(u.origin===legacy){
   const match=u.pathname.match(/^\/(course|live|session|ReadSession)\/(\d{1,12})\/?$/);
   if(match){if(match[1]==='course')return `/course/legacy/${match[2]}${filterQuery(u)}`;return '/open?'+new URLSearchParams({[match[1]==='live'?'legacy_live':'legacy_session']:match[2]});}
-  if(['','/','/home','/recordCourse'].includes(u.pathname))return '/courses?scope=all&platform=legacy';
+  if(['','/','/home','/recordCourse'].includes(u.pathname))return '/courses?scope=my&platform=legacy';
   // Legacy live listings are not a reliable source for the current platform's live schedule.
-  if(u.pathname==='/liveCourse')return '/today';
+  if(u.pathname==='/profile/myCourse')return '/courses?scope=my&platform=legacy';
+  if(u.pathname==='/liveCourse')return null;
   return null;
  }
  if(['/coursedetail','/livingroom','/livingroomnew','/videoroom','/coursevideo'].includes(u.pathname)&&digits(u.searchParams.get('course_id'))){
@@ -29,7 +30,7 @@ export function siteRoute(raw){
  if(['/education/','/education'].includes(u.pathname)&&u.hash.startsWith('#/home?menu_code=B-wdkc'))return '/courses';
  return null;
 }
-function filterQuery(u){const p=new URLSearchParams();for(const name of ['scope','q','platform','term','teacher','college','page','tab','sub','course','state'])if(u.searchParams.has('yh_'+name))p.set(name,u.searchParams.get('yh_'+name));return p.size?'?'+p:'';}
+function filterQuery(u){const p=new URLSearchParams();for(const name of ['scope','q','platform','term','teacher','college','page','tab','sub','live','course','state'])if(u.searchParams.has('yh_'+name))p.set(name,u.searchParams.get('yh_'+name));return p.size?'?'+p:'';}
 export function siteHref(route){
  const raw=route.replace(/^#/,'');const [path,query='']=raw.split('?'),p=new URLSearchParams(query),parts=path.split('/').filter(Boolean);let u;
  if(parts[0]==='course'&&['modern','legacy'].includes(parts[1])&&digits(parts[2])){
@@ -43,7 +44,7 @@ export function siteHref(route){
  else if(parts[0]==='courses'){u=new URL(`${modern}/personal/#/myStudy/myCourse`);if(p.get('scope')==='all')u=new URL(`${modern}/searchContent?tenant_code=21`);}
  else if(parts[0]==='tasks')u=new URL(`${modern}/personal/#/myStudy/myTask`);
  else {u=new URL(`${modern}/personal/`);u.searchParams.set('yh_view',['materials','settings','more'].includes(parts[0])?parts[0]:'today');}
- for(const [key,value]of p)if(value&&['scope','q','platform','term','teacher','college','page','tab','sub','course','state'].includes(key))u.searchParams.set('yh_'+key,value);
+ for(const [key,value]of p)if(value&&['scope','q','platform','term','teacher','college','page','tab','sub','live','course','state'].includes(key))u.searchParams.set('yh_'+key,value);
  return u.href;
 }
 export function nativeHref(raw){const u=new URL(raw);if([modern,legacy].includes(u.origin))u.searchParams.set('yh_native','1');return u.href;}

@@ -7,3 +7,13 @@
 @media(max-width:820px){.more-groups{grid-template-columns:1fr;gap:24px}.sidebar-bottom{flex-direction:column}}
 @media(max-width:820px){.course-mobile-meta{display:inline}.course-college>span:first-child{display:none}.course-row .term{display:none}.course-row{grid-template-columns:minmax(150px,1fr) 90px 32px}}
 @media(max-width:560px){.page-heading .date-navigation{max-width:none;flex-wrap:nowrap;gap:3px}.date-navigation button{padding-inline:6px}.course-row{grid-template-columns:minmax(130px,1fr) 70px 28px}}
+
+/* Use the available desktop width; typography grows slightly on very wide displays. */
+:root{font-size:clamp(15px,calc(13px + .13vw),18px)}
+main{max-width:none;margin:0;padding:28px clamp(22px,2.3vw,72px) 40px}.topbar{height:76px;padding-inline:clamp(22px,2.3vw,72px)}
+main[data-page="course"]{padding:24px clamp(18px,1.6vw,48px) 28px}.course-heading{margin-bottom:8px}.course-heading h1{margin-bottom:4px}.course-route-back{margin-bottom:8px}.course-tabs{margin-top:12px;margin-bottom:16px}
+.grid-today{grid-template-columns:minmax(0,1.25fr) minmax(320px,.8fr);gap:32px}.lesson-body{padding:19px 22px}.lesson-body .lesson-bottom{margin-top:18px}.today-courses{margin-top:32px}.today-course-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 28px}.today-course-grid .resume-row{min-width:0}.today-course-grid .resume-row h3{white-space:normal}.watch-frame{height:720px}
+@media(min-width:1850px){.grid-today{grid-template-columns:minmax(550px,1.4fr) minmax(620px,1.5fr);gap:clamp(32px,3vw,90px)}.grid-today>div{display:grid;grid-template-columns:1fr 1fr;gap:32px}.lesson-body h3{font-size:20px}.course-heading h1{font-size:31px}.today-course-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:1100px){main{padding:25px}.grid-today{grid-template-columns:minmax(0,1.2fr) minmax(240px,1fr);gap:24px}}
+@media(max-width:820px){.grid-today{grid-template-columns:1fr}.topbar{height:70px;padding-inline:20px}main,main[data-page="course"]{padding:22px 18px}.today-course-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}}
+@media(max-width:560px){main,main[data-page="course"]{padding:20px 12px}.topbar{padding-inline:12px}.today-course-grid{grid-template-columns:1fr}.lesson-body{padding:14px}.heading-tools .date-navigation{order:2}.page-heading .heading-tools{justify-content:flex-end}.course-tabs{gap:20px}.course-heading h1{font-size:22px}}

@@ -8,7 +8,7 @@ export function mountSite(){
  document.open();document.write('<!doctype html><html lang="zh-CN"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body></body></html>');document.close();
  const html=document.documentElement,body=document.body||html.appendChild(document.createElement('body'));html.dataset.refine='active';body.style.margin='0';document.title='延河课堂';
  const host=document.createElement('div');host.id='yanhe-refine';body.append(host);const shadow=host.attachShadow({mode:'open'});
- const sheet=new CSSStyleSheet();sheet.replaceSync(styles.replace(':root',':host').replace('body{margin:0}', '.refine-root{margin:0}'));shadow.adoptedStyleSheets=[sheet];
+ const sheet=new CSSStyleSheet();sheet.replaceSync(styles.replaceAll(':root',':host').replace('body{margin:0}', '.refine-root{margin:0}'));shadow.adoptedStyleSheets=[sheet];
  const template=new DOMParser().parseFromString(layout,'text/html');template.querySelectorAll('script').forEach(n=>n.remove());
  const wrapper=document.createElement('div');wrapper.className='refine-root';wrapper.append(...Array.from(template.body.childNodes));shadow.append(wrapper);
  const symbols=new DOMParser().parseFromString(icons,'image/svg+xml');

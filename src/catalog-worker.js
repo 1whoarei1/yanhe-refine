@@ -1,12 +1,12 @@
 import {unzipSync,strFromU8} from 'fflate';
 import {SaxesParser} from 'saxes';
 import {normalizeCourse,searchCourses,relatedCourses} from './catalog-core.js';
-let rows=[],db;
+let rows=[],db,index=new Map(),statsCache;
 const request=idb=>new Promise((resolve,reject)=>{idb.onsuccess=()=>resolve(idb.result);idb.onerror=()=>reject(idb.error);});
 async function database(){if(db)return db;const op=indexedDB.open('yanhe-desk',1);op.onupgradeneeded=()=>{op.result.createObjectStore('courses',{keyPath:'key'});op.result.createObjectStore('meta');};db=await request(op);return db;}
 async function transaction(mode,write){const d=await database(),tx=d.transaction(['courses','meta'],mode);return new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('保存失败'));try{write(tx);}catch(e){tx.abort();reject(e);}});}
-async function load(){const d=await database();rows=await request(d.transaction('courses').objectStore('courses').getAll());return stats();}
-function stats(){return {count:rows.length,legacy:rows.filter(r=>r.platform==='legacy').length,modern:rows.filter(r=>r.platform==='modern').length,
+async function load(){const d=await database();rows=await request(d.transaction('courses').objectStore('courses').getAll());index=new Map(rows.map(r=>[r.key,r]));statsCache=null;return stats();}
+function stats(){return statsCache ||= {count:rows.length,legacy:rows.filter(r=>r.platform==='legacy').length,modern:rows.filter(r=>r.platform==='modern').length,
  terms:[...new Set(rows.map(r=>r.term).filter(Boolean))].sort().reverse(),colleges:[...new Set(rows.map(r=>r.college).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'))};}
 function xml(raw,onOpen,onText,onClose){const parser=new SaxesParser({xmlns:false});parser.on('opentag',onOpen||(()=>{}));parser.on('text',onText||(()=>{}));parser.on('closetag',tag=>onClose?.(tag.name));parser.write(raw).close();}
 export function readXlsx(buffer,progress=()=>{}) {
@@ -40,14 +40,14 @@ export function readXlsx(buffer,progress=()=>{}) {
 async function saveRecords(records,replace=false){
  const mapped=new Map((replace?[]:rows).map(r=>[r.key,r]));for(const r of records){const previous=mapped.get(r.key);mapped.set(r.key,normalizeCourse({...previous,...r,teacher:r.teacher||previous?.teacher,term:r.term||previous?.term,college:r.college||previous?.college,code:r.code||previous?.code,lmsId:r.lmsId||previous?.lmsId}));}
  await transaction('readwrite',tx=>{const store=tx.objectStore('courses');if(replace)store.clear();for(const r of records)store.put(mapped.get(r.key));tx.objectStore('meta').put(Date.now(),'updatedAt');});
- rows=[...mapped.values()];return stats();
+ rows=[...mapped.values()];index=mapped;statsCache=null;return stats();
 }
 export async function perform(type,args={},progress=()=>{}){
  if(type==='init')return load();
  if(type==='stats')return stats();
  if(type==='search')return searchCourses(rows,args);
- if(type==='related')return relatedCourses(rows,args.course,args.kind,args.limit);
- if(type==='get')return rows.find(r=>r.key===args.key)||null;
+ if(type==='related')return relatedCourses(args.platform?rows.filter(r=>r.platform===args.platform):rows,args.course,args.kind,args.limit);
+ if(type==='get')return index.get(args.key)||null;
  if(type==='upsert')return saveRecords(args.rows.map(r=>normalizeCourse(r)).filter(Boolean));
  if(type==='import'){
   let records;

@@ -1,7 +1,7 @@
 {
  "manifest_version":3,
  "name":"延河焕新",
- "version":"0.5.0",
+ "version":"0.6.0",
  "description":"直接重构延河课堂原站：整合导航、课程发现、直录播、平台字幕和学习资料。",
  "minimum_chrome_version":"120",
  "permissions":["cookies","storage","declarativeNetRequestWithHostAccess"],

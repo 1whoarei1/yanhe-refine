@@ -63,3 +63,22 @@ export function parseLegacyCaptions(text) {
   }
   return rows.sort((a,b)=>a.start-b.start);
 }
+
+// The legacy live page consumes /v1/live.target, target_vga and target_room.
+// Status 2 can become live inside the scheduled window; status 3 is always ended.
+export function legacyLive(data,now=Date.now()) {
+ const epoch=value=>{const text=String(value||'').replace(' ','T');return Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(text)?text:text+'+08:00')||0;};
+ const start=epoch(data.schedule_started_at),end=epoch(data.schedule_ended_at),status=Number(data.status);
+ const mode=status===3||(end&&now>end+120000)?'ended':status===1||(status===2&&start&&now>=start&&(!end||now<end))?'live':status===2?'upcoming':'ended';
+ const streams={},candidates={};
+ if(mode==='live')for(const [field,view] of [['target','classroom'],['target_vga','screen'],['target_room','student']]){
+  if(!data[field])continue;try{const url=mediaUrl(data[field]),format=/\.m3u8$/i.test(url.pathname)?'hls':/\.flv$/i.test(url.pathname)?'flv':null;
+   if(format){streams[view]=url.href;candidates[view]=[{url:url.href,format}];}
+  }catch{}
+ }
+ return {mode,title:String(data.title||'旧版直播'),start,duration:0,streams,candidates};
+}
+export function legacyLiveSignedUrl(raw,token,hash){
+ const url=mediaUrl(raw);
+ return ['cvideo.yanhekt.cn','coss.yanhekt.cn'].includes(url.hostname)?legacySignedUrl(raw,token,hash):url.href;
+}

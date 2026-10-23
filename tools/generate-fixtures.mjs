@@ -21,4 +21,5 @@ run(['-i', join(folder,'test.mp4'),'-c','copy','-f','flv',join(folder,'test.flv'
 run(['-f', 'lavfi', '-i', 'color=c=0x183f53:s=160x90:r=2:d=120',
   '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-g', '4',
   '-movflags', '+faststart', join(folder, 'timing.mp4')]);
+run(['-f','lavfi','-i','color=c=0x674d37:s=320x180:r=5:d=120','-an','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-g','10','-movflags','+faststart',join(folder,'timing-room.mp4')]);
 console.log('Generated synthetic MP4/HLS and subtitle-timing fixtures in tests/fixtures.');
