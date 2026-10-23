@@ -3,6 +3,8 @@ dist/
 test-results/
 tests/fixtures/
 local-data/
+课程目录/
+release-catalog.json
 extension/
 tools/update-loaded.py
 __pycache__/
