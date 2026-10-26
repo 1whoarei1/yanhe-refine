@@ -13,6 +13,6 @@ chrome.action.onClicked.addListener(async tab=>{
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
  if(sender.id!==chrome.runtime.id)return;
  if(message?.type==='REFINE_READ'&&trustedReader(sender)){readOperation(message.operation,message.args).then(value=>respond({ok:true,value}),e=>respond({ok:false,error:e.message||'读取失败'}));return true;}
- if(message?.type==='ENSURE_RULES'&&sender.url?.startsWith(chrome.runtime.getURL('watch/player.html'))){rules().then(()=>respond({ok:true}),()=>respond({ok:false}));return true;}
+ if(message?.type==='ENSURE_RULES'&&['watch/player.html','watch/download.html'].some(path=>sender.url?.startsWith(chrome.runtime.getURL(path)))){rules().then(()=>respond({ok:true}),()=>respond({ok:false}));return true;}
  if(['OPEN_PLAYER','OPEN_DESK'].includes(message?.type)&&sender.tab&&isPlatformPage(sender.url)){chrome.tabs.update(sender.tab.id,{url:sender.url}).then(()=>respond({ok:true}),()=>respond({ok:false}));return true;}
 });

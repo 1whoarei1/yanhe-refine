@@ -3,6 +3,7 @@ import { YanheApi } from './api.js';
 import { LegacyYanheApi } from './legacy-api.js';
 import { parseCourse, clock, vtt, explain, subtitleOffset, shiftSubtitles, subtitleClock } from './core.js';
 import { liveLabels, liveEdge } from './live-core.js';
+import {replayViews} from './media-download.js';
 
 const $ = id => document.getElementById(id);
 document.body.classList.toggle('embedded',new URLSearchParams(location.search).get('embedded')==='1');
@@ -35,6 +36,11 @@ for(const [id,cls]of [['toggle-lectures','hide-lectures'],['toggle-subtitles','h
 const views = ['screen','classroom','student'];
 function isLive() { return state.info?.mode === 'live'; }
 function liveContext() { return state.info && state.info.mode && state.info.mode !== 'replay'; }
+$('download-video').addEventListener('click',()=>{
+ if(!state.course||!state.selected||!replayViews(state.info).length)return;
+ const params=new URLSearchParams({platform:state.course.legacy?'legacy':'modern',course:state.course.id,lecture:state.selected.id,view:dual?'all':state.view});
+ void chrome.tabs.create({url:chrome.runtime.getURL('watch/download.html')+'?'+params});
+});
 
 function message(text, kind = '') { $('message').textContent = text; $('message').className = `notice ${kind}`; }
 function playbackStatus(text, error = false) { $('playback-status').textContent = text; $('playback-status').className = `playback-status${error ? ' error' : ''}`; }
@@ -67,6 +73,7 @@ function clearCaptionTracks() {
   if (state.vttUrl) { URL.revokeObjectURL(state.vttUrl); state.vttUrl = null; }
 }
 function resetSelection() {
+  $('download-video').disabled=true;
   saveProgress(true); state.controller?.abort(); clearMedia(); state.selected = null; state.info = null; state.subtitles = []; state.rawSubtitles = [];
   dual=false;updateDual();state.offsets = { screen: 0, classroom: 0 }; state.calibrating = false;
   state.blockedViews.clear(); state.sourceNote = '';
@@ -229,7 +236,7 @@ function updateViews() {
   }
 }
 
-async function loadCourse() {
+async function loadCourse(force=false) {
   if (state.courseLoading) return;
   let ref;
   try { ref = parseCourse($('course-input').value,$('platform').value); }
@@ -245,14 +252,23 @@ async function loadCourse() {
     if (!rules?.ok) throw new Error('插件的播放请求配置未准备好。请在扩展管理页面重新加载本插件。');
     if (ref.legacy) ref=await api.resolve(ref,state.controller.signal);
     if (sequence !== state.sequence) return;
-    const course = ref.legacy&&ref.liveId ? await api.liveCourse(ref,state.controller.signal) : await api.course(ref.id,state.controller.signal);
+    let course;
+    if(ref.legacy&&ref.liveId)course=await api.liveCourse(ref,state.controller.signal);
+    else{
+      // The shared background retains metadata/auth in memory across iframe recreation.
+      // Media and subtitle requests still use this player's fresh API instance.
+      const reply=await chrome.runtime.sendMessage({type:'REFINE_READ',operation:'detail',args:{args:[ref.legacy?'legacy':'modern',ref.id,{force}]}});
+      if(reply?.error)throw new Error(reply.error);
+      course=reply?.ok?{...reply.value,legacy:Boolean(ref.legacy)}:await api.course(ref.id,state.controller.signal,{force});
+    }
     if (sequence !== state.sequence) return;
     state.course = course; $('course-title').textContent = course.title;
     if(parent!==window){const origin=location.ancestorOrigins?.[0];if(['https://aita.yanhekt.cn','https://www.yanhekt.cn'].includes(origin))parent.postMessage({type:'REFINE_COURSE',course:{id:course.id,title:course.title,teacher:course.teacher,term:course.term}},origin);}
     $('course-meta').textContent = [course.teacher,course.term,`课程 ID ${course.id}`].filter(Boolean).join(' / ');
     $('connection').textContent = '已连接延河课堂'; $('connection').classList.add('online');
     state.filter = ref.liveId || (!ref.legacy && (ref.subId || (!(course.replays || []).length && course.lives?.length))) ? 'live' : 'replay';
-    const target = ref.liveId ? course.lives.find(row=>row.id==='live:'+ref.liveId) : ref.sessionId ? course.replays.find(row=>row.id.split(':')[0]===ref.sessionId) : ref.subId && [...course.replays,...course.lives || []].find(row => row.id === ref.subId);
+    const previous=await storage.get('lastLecture:'+courseKey());if(sequence!==state.sequence)return;
+    const target = ref.liveId ? course.lives.find(row=>row.id==='live:'+ref.liveId) : ref.sessionId ? course.replays.find(row=>row.id.split(':')[0]===ref.sessionId) : ref.subId ? [...course.replays,...course.lives || []].find(row => row.id === ref.subId) : course.replays.find(row=>row.id===previous);
     if (target && !target.mode) state.filter = 'replay';
     message(''); renderLectures();
     $('subtitle-list').append(textNode('p','暂无字幕','empty'));
@@ -279,6 +295,8 @@ async function selectLecture(lecture) {
     const info = await api.lecture(state.course.id,lecture.id,signal);
     if (sequence !== state.sequence) return;
     state.info = info;
+    $('download-video').disabled=!replayViews(info).length;
+    if(!info.mode||info.mode==='replay')void storage.set({['lastLecture:'+courseKey()]:lecture.id});
     if (info.title) $('lecture-title').textContent = info.title;
     document.querySelector('.workspace').classList.toggle('live-mode',Boolean(liveContext()));
     $('speed').disabled = Boolean(liveContext()); $('go-live').hidden = !isLive();
@@ -435,11 +453,11 @@ function handleMediaError(kind, status = 0) {
     `视频连接失败${status ? `（HTTP ${status}）` : ''}。请检查校园网 / VPN、代理绕过，再点击重新连接。`,true);
 }
 
-$('course-form').addEventListener('submit',event => { event.preventDefault(); void loadCourse(); });
+$('course-form').addEventListener('submit',event => { event.preventDefault(); void loadCourse(true); });
 $('play').addEventListener('click',() => { state.lastRecovery = 0; void connectPlayback(state.resume); });
 $('retry').addEventListener('click',() => { state.lastRecovery = 0; if (state.selected && (!state.info || (liveContext() && !state.attached))) void selectLecture(state.selected); else void connectPlayback(video.currentTime || state.resume,{refresh:true}); });
 for (const filter of ['replay','live']) $(`filter-${filter}`).addEventListener('click',() => { state.filter = filter; if (state.course) renderLectures(); });
-$('refresh-list').addEventListener('click',() => { if (state.courseLoading) return; void loadCourse(); });
+$('refresh-list').addEventListener('click',() => { if (state.courseLoading) return; void loadCourse(true); });
 $('go-live').addEventListener('click',() => {
   if (!isLive() || !state.attached) return;
   const target = liveEdge(video,state.hls);
@@ -506,9 +524,9 @@ const course = params.get('legacy') || params.get('course') || await storage.get
 const legacy = Boolean(legacyLive || legacySession) || (source ? source.startsWith('https://www.yanhekt.cn/') : params.has('legacy') || (!params.has('course') && await storage.get('lastPlatform') === 'legacy'));
 $('platform').value = legacy ? 'legacy' : 'modern';
 $('site-link').href = legacy ? 'https://www.yanhekt.cn/' : 'https://aita.yanhekt.cn/';
-if (source) { $('course-input').value=source;void loadCourse(); }
+if (source) { $('course-input').value=source;void loadCourse(params.get('refresh')==='1'); }
 else if (/^\d{1,12}$/.test(course || '')) {
   const subId = params.get('sub_id');
   $('course-input').value = legacy ? `https://www.yanhekt.cn/course/${course}` : /^\d{1,12}$/.test(subId || '') ? `https://aita.yanhekt.cn/livingroom?course_id=${course}&sub_id=${subId}` : course;
-  void loadCourse();
+  void loadCourse(params.get('refresh')==='1');
 }

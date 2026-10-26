@@ -1,12 +1,13 @@
 import { ORIGIN, tokenFromCookie, replayRows, streamsFrom, signedUrl, subtitleRows } from './core.js';
 import { liveRows, lectureMode, liveStreams } from './live-core.js';
+import {ReplayCache} from './replay-cache.js';
 
 class AuthError extends Error {}
 
 export class YanheApi {
   constructor({ fetcher = globalThis.fetch.bind(globalThis), cookies = globalThis.chrome?.cookies, tabs = globalThis.chrome?.tabs, hash = globalThis.md5 } = {}) {
     this.fetcher = fetcher; this.cookies = cookies; this.tabs = tabs; this.hash = hash;
-    this.profile = null; this.account = null; this.token = null; this.authAt = 0;
+    this.profile = null; this.account = null; this.token = null; this.authAt = 0;this.replayCache=new ReplayCache();
   }
   reset() { this.profile = null; this.account = null; this.token = null; this.authAt = 0; }
   async json(path, params = {}, { signal, profile = false, headers = {}, codes = [0,10002] } = {}) {
@@ -56,11 +57,13 @@ export class YanheApi {
     }
     throw new Error('已找到登录凭据，但平台未接受。请刷新已登录的课堂网页；若原站也提示登录失效，请重新登录后读取课程。');
   }
-  async course(id, signal) {
+  async course(id, signal, options={}) {
     await this.authenticate({ signal });
+    return this.replayCache.read('modern',id,`${this.profile.tenant_id}:${this.profile.id}`,async()=>{
     const { data } = await this.json('/courseapi/v3/multi-search/get-course-detail', { course_id: id }, { signal });
     if (!data) throw new Error('未找到课程详情，请核对新版课程 ID。');
-    return { id, title: String(data.title || '课程回放'), teacher: String(data.realname || ''), term: String(data.term_name || ''), replays: replayRows(data.sub_list), lives: liveRows(data.sub_list) };
+    return { id, title: String(data.title || '课程回放'), teacher: String(data.realname || ''), term: String(data.term_name || ''),college:data.kkxy_name||'',code:data.course_code||'',lmsId:data.zhiyuan_id||'', replays: replayRows(data.sub_list), lives: liveRows(data.sub_list) };
+    },{...options,signal});
   }
   async livePagePermission(courseId, subId, signal) {
     if (!/^\d{1,12}$/.test(String(courseId)) || !/^\d{1,12}$/.test(String(subId))) throw new Error('直播课程或课次 ID 无效。');

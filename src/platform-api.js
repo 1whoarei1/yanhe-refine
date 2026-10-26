@@ -38,10 +38,9 @@ export class PlatformApi extends YanheApi {
   }
   return [...rows.values()].sort((a,b)=>(a.start||0)-(b.start||0));
  }
- async detail(id){
-  await this.authenticate();const {data}=await this.json('/courseapi/v3/multi-search/get-course-detail',{course_id:id});
-  const course=normalizeCourse(data,'modern');if(!course)throw new Error('未找到课程');
-  return {...course,replays:replayRows(data.sub_list),lives:liveRows(data.sub_list)};
+ async detail(id,options={}){
+  const data=await this.course(id,undefined,options),course=normalizeCourse(data,'modern');if(!course)throw new Error('未找到课程');
+  return {...course,replays:data.replays,lives:data.lives};
  }
  async otherTeacherCourses(id){
   await this.authenticate();const {data}=await this.json('/courseapi/v3/multi-search/get-course-teacher-others',{course_id:id,per_page:20});
@@ -82,9 +81,9 @@ export class CourseSources {
   throw new Error('旧版课程列表过长');
  }
  async resolve(value,platform){const ref=parseCourse(value,platform);return ref.legacy?this.legacy.resolve(ref):ref;}
- async detail(platform,id){
-  if(platform==='modern')return this.modern.detail(id);
-  const data=await this.legacy.course(id);return {...normalizeCourse({...data,platform:'legacy'}),replays:data.replays,lives:[]};
+ async detail(platform,id,options={}){
+  if(platform==='modern')return this.modern.detail(id,options);
+  const data=await this.legacy.course(id,undefined,options);return {...normalizeCourse({...data,platform:'legacy'}),replays:data.replays,lives:[]};
  }
  reset(){this.modern.reset();this.legacy.reset();}
 }

@@ -62,18 +62,21 @@ export class LegacyYanheApi extends YanheApi {
     const info=legacyLive(data);
     return {id:ref.id,legacy:true,title:String(data.course?.name_zh||data.title||'旧版直播'),teacher:String(data.session?.professor?.name||''),term:'',replays:[],lives:[{id:'live:'+ref.liveId,title:info.title,start:info.start,mode:info.mode}]};
   }
-  async course(id,signal) {
+  async course(id,signal,options={}) {
     await this.authenticate({signal});
+    return this.replayCache.read('legacy',id,String(this.profile.id),async()=>{
     const [course,sessions]=await Promise.all([this.json('/v1/course',{id,with_professor_badges:true},{signal}),this.json('/v2/course/session/list',{course_id:id},{signal})]);
     if(!course.data?.id)throw new Error('旧版课堂未找到这门课。');
     if(!Array.isArray(sessions.data))throw new Error('旧站返回了无效的课次列表。');
     const rows=legacyReplays(sessions.data);this.lectures=new Map(rows.map(row=>[row.id,row.video]));
     return {id,legacy:true,title:String(course.data.name_zh||'旧版课程'),teacher:(course.data.professors||[]).map(row=>row.name).filter(Boolean).join('、'),
       term:[course.data.school_year,course.data.semester].filter(Boolean).join('-'),replays:rows.map(({video,...row})=>row)};
+    },{...options,signal});
   }
   async lecture(courseId,subId,signal) {
     await this.authenticate({signal});
     if(/^live:\d{1,12}$/.test(subId)){const {data}=await this.json('/v1/live',{id:subId.slice(5),with_session:true,with_course:true},{signal});if(!data||String(data.course_id||data.course?.id)!==String(courseId))throw new Error('直播课程信息不一致');return legacyLive(data);}
+    if(!this.lectures.has(subId)){const {data}=await this.json('/v2/course/session/list',{course_id:courseId},{signal});if(!Array.isArray(data))throw new Error('旧站课次列表无效');this.lectures=new Map(legacyReplays(data).map(row=>[row.id,row.video]));}
     const video=this.lectures.get(subId);
     if(!video)throw new Error('未找到旧站视频，请重新读取课程。');return legacyStreams(video);
   }

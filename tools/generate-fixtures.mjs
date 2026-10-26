@@ -1,12 +1,13 @@
 // Only synthetic patterns are generated; no network or classroom media is used.
-import { mkdir } from 'node:fs/promises';
+import { mkdir,stat } from 'node:fs/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const folder = resolve(dirname(fileURLToPath(import.meta.url)), '../tests/fixtures');
 await mkdir(folder, { recursive: true });
-const ffmpeg = process.env.FFMPEG || 'ffmpeg';
+const configured=process.env.FFMPEG||'ffmpeg';
+const ffmpeg=(await stat(configured).catch(()=>null))?.isDirectory()?join(configured,process.platform==='win32'?'ffmpeg.exe':'ffmpeg'):configured;
 function run(args) {
   const result = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'inherit' });
   if (result.error) throw new Error('FFmpeg is required. Install it or set FFMPEG to its executable path.', { cause: result.error });
@@ -22,4 +23,6 @@ run(['-f', 'lavfi', '-i', 'color=c=0x183f53:s=160x90:r=2:d=120',
   '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-g', '4',
   '-movflags', '+faststart', join(folder, 'timing.mp4')]);
 run(['-f','lavfi','-i','color=c=0x674d37:s=320x180:r=5:d=120','-an','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-g','10','-movflags','+faststart',join(folder,'timing-room.mp4')]);
-console.log('Generated synthetic MP4/HLS and subtitle-timing fixtures in tests/fixtures.');
+run(['-f','lavfi','-i','testsrc2=size=320x180:rate=12:duration=4','-f','lavfi','-i','sine=frequency=440:sample_rate=44100:duration=4','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-g','24','-c:a','aac','-movflags','+faststart',join(folder,'download.mp4')]);
+run(['-i',join(folder,'download.mp4'),'-c','copy','-f','hls','-hls_time','2','-hls_list_size','0','-hls_segment_filename',join(folder,'download%03d.ts'),join(folder,'download.m3u8')]);
+console.log('Generated synthetic MP4/HLS, audio/video download and subtitle-timing fixtures in tests/fixtures.');

@@ -99,7 +99,7 @@ async function coursesPage(epoch,params){
 async function detailCourse(platform,id){
  const key=courseKey(platform,id);if(state.details.has(key))return state.details.get(key);
  const cached=await catalog.call('get',{key});
- const actual=await sources.detail(platform,id);const course=normalizeCourse({...cached,...actual,code:actual.code||cached?.code,college:actual.college||cached?.college,lmsId:actual.lmsId||cached?.lmsId});
+ const actual=await sources.detail(platform,id,{force:state.refresh});const course=normalizeCourse({...cached,...actual,code:actual.code||cached?.code,college:actual.college||cached?.college,lmsId:actual.lmsId||cached?.lmsId});
  const full={...course,replays:actual.replays,lives:actual.lives};state.details.set(key,full);await catalog.call('upsert',{rows:[course]});return full;
 }
 async function coursePage(epoch,platform,id,params){
@@ -110,6 +110,7 @@ async function coursePage(epoch,platform,id,params){
  setPage(epoch,node('div',{class:'page-heading course-heading'},title,toolbar),tabs([['watch','观看',routeTo(course)],['history','同师往年',routeTo(course,'history')],['peers','同课老师',routeTo(course,'peers')],['materials','资料与任务',routeTo(course,'materials')]],tab),area);
  if(tab==='watch'){
   const src=new URL(chrome.runtime.getURL('watch/player.html'));src.searchParams.set(platform==='legacy'?'legacy':'course',id);src.searchParams.set('embedded','1');
+  if(state.refresh)src.searchParams.set('refresh','1');
   const legacyLive=params.get('live');if(platform==='legacy'&&/^\d{1,12}$/.test(legacyLive||'')){src.searchParams.delete('legacy');src.searchParams.set('legacy_live',legacyLive);}
   const sub=params.get('sub');if(!legacyLive&&sub&&/^\d{1,12}$/.test(sub)){if(platform==='legacy'){src.searchParams.delete('legacy');src.searchParams.set('legacy_session',sub);}else src.searchParams.set('sub_id',sub);}
   const frame=node('iframe',{src:src.href,class:'watch-frame',title:'课程播放器',allow:'fullscreen','allowfullscreen':''});

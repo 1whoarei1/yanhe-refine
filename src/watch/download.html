@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>视频下载 · 延河焕新</title><link rel="stylesheet" href="download.css"></head>
+<body><main>
+ <header><span>延河焕新</span><h1>视频下载</h1><h2 id="course-title"></h2><p id="lecture-title"></p></header>
+ <div id="message" role="status">正在读取课次…</div>
+ <section id="download-panel" hidden>
+  <div class="selection"><label><input id="select-all" type="checkbox">全部画面</label><span id="selection-count"></span></div>
+  <div id="channels"></div>
+  <div class="actions"><button id="start" type="button" disabled>选择文件夹并下载</button><button id="cancel" type="button" hidden>停止下载</button></div>
+  <p id="destination"></p><p class="hint">下载时保持此页打开 · MP4 保留原文件，HLS 合并为 TS / MP4</p>
+ </section>
+</main><script src="vendor/md5.min.js"></script><script type="module" src="download.js"></script></body></html>
