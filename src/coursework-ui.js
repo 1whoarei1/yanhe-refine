@@ -71,5 +71,7 @@ export function courseworkUi({root,lms,lexue,node,button,link,loading,empty,toas
   const editor=data.submissions.some(s=>!s.draft)?node('details',{class:'resubmit-form'},node('summary',{},'再次提交'),form):form;
   content.replaceChildren(meta,description,attachments,history,data.canSubmit?editor:node('div',{class:'dialog-footer'},node('span',{class:'muted'},data.submitReason),link(data.nativeAction||'在原站查看',row.url,'button-link')));
  }
- return {resources,task,allButton};
+ let context=null;
+ function setContext(value){if(value===context)return;context=value;if(!busy){generation++;if(dialog.open)dialog.close();}}
+ return {resources,task,allButton,setContext};
 }

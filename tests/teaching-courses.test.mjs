@@ -20,3 +20,7 @@ test('concurrent views share in-flight reads, but an expired login discards the 
  const cache=new TeachingCourses({lms:{courses:async()=>[]},lexue:{courses:async()=>{reads++;await wait;if(!connected)throw new Error('expired');return [{id:'401'}];}}});
  const first=cache.load(),second=cache.load();finish();await Promise.all([first,second]);assert.equal(reads,1);connected=false;const result=await cache.load({source:'lexue',force:true});assert.deepEqual(result.rows,[]);assert.deepEqual(result.status,[true,false]);
 });
+test('a force refresh waits for an ordinary in-flight read and then actually requests fresh courses',async()=>{
+ let finish,reads=0;const cache=new TeachingCourses({lms:{courses:async()=>[]},lexue:{courses:async force=>{reads++;if(!force)return new Promise(resolve=>finish=()=>resolve([{id:'old'}]));return [{id:'fresh'}];}}});
+ const initial=cache.load();await Promise.resolve();const refreshed=cache.load({source:'lexue',force:true});finish();await initial;const result=await refreshed;assert.equal(reads,2);assert.equal(result.rows[0].id,'fresh');
+});

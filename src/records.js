@@ -1,3 +1,4 @@
+import {safeBindings} from './course-bindings.js';
 export function safeRecords(data){
  if(!data||typeof data!=='object'||Array.isArray(data))throw new Error('学习记录格式无效');
  const result={};
@@ -8,6 +9,7 @@ export function safeRecords(data){
   else if(key==='lastPlatform'&&['legacy','modern'].includes(v))result[key]=v;
   else if(key==='desk:favorites'&&Array.isArray(v))result[key]=[...new Set(v.filter(k=>/^(legacy|modern):\d{1,8}:\d{1,12}$/.test(k)))];
   else if(key==='desk:mappings'&&v&&typeof v==='object')result[key]=Object.fromEntries(Object.entries(v).filter(([k,id])=>/^(legacy|modern):\d{1,8}:\d{1,12}$/.test(k)&&/^(?:lexue:)?\d{1,12}$/.test(String(id))).map(([k,id])=>[k,String(id)]));
+  else if(key==='desk:bindings')result[key]=safeBindings(v);
  }
  return result;
 }

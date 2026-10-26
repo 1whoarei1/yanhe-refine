@@ -16,6 +16,7 @@ export function lmsCourses(body) {
 }
 export function activityUrl(courseId,id) {return `https://zy-eclass.bit.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`;}
 export function homeworkRows(body,statusBody={},courseId) {
+ if((body.homework_activities||[]).some(r=>r.course_id!=null&&String(r.course_id)!==String(courseId)))throw new Error('作业列表与当前课程不一致');
  const status=new Map((statusBody.homework_activities||[]).map(r=>[text(r.id),r]));
  return (body.homework_activities||[]).filter(published).map(r=>{
   const id=text(r.id),s=status.get(id),raw=text(s?.status||r.submitted_status).toLowerCase();
@@ -29,6 +30,7 @@ export function homeworkRows(body,statusBody={},courseId) {
 }
 export function materialRows(body,courseId) {
  const rows=Array.isArray(body)?body:body.learning_activities||body.courseware_activities||body.activities||[];
+ if(rows.some(r=>r.course_id!=null&&String(r.course_id)!==String(courseId)))throw new Error('资料列表与当前课程不一致');
  return rows.filter(r=>published(r)&&['material','resource','courseware'].includes(text(r.type))).map(r=>({id:text(r.id),courseId:text(courseId),
   title:text(r.title||r.name)||'课件',type:'material',url:activityUrl(courseId,r.id)})).filter(r=>/^\d{1,12}$/.test(r.id));
 }
