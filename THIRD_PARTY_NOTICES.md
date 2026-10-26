@@ -20,6 +20,10 @@ Thank you to the authors and maintainers for publishing their research and tools
 | fflate | 0.8.3 | XLSX ZIP container | MIT, `licenses/fflate.LICENSE` |
 | saxes | 6.0.0 | XLSX XML parsing | ISC, `licenses/saxes.LICENSE`, including inherited sax and historical notices |
 | xmlchars | 2.2.0 | XML characters used by saxes | MIT, `licenses/xmlchars.LICENSE` |
+| parse5 | 8.0.1 | Parse server-rendered Moodle HTML | MIT, `licenses/parse5.LICENSE` |
+| entities | 8.1.0 | HTML character references used by parse5 | BSD-2-Clause, `licenses/entities.LICENSE` |
+
+The old Lexue integration uses the site's Moodle course overview and server-rendered module pages as protocol references. It does not bundle Moodle source code. Thanks to the [Moodle project](https://github.com/moodle/moodle), [parse5](https://github.com/inikulin/parse5), and [entities](https://github.com/fb55/entities) maintainers.
 
 The saxes 6.0.0 npm archive omits its license file; the original notice is copied from the upstream [v6.0.0 LICENSE](https://github.com/lddubeau/saxes/blob/v6.0.0/LICENSE). Browser runtime libraries are included locally; no external script CDN is used.
 

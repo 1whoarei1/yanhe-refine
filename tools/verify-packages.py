@@ -38,7 +38,7 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    assert len(json.loads(seed)['courses'])==info['catalog']['count']
   for n in names:
    assert z.read(n)==(folder/n).read_bytes(),n
-  for n in ['README.md','THIRD_PARTY_NOTICES.md','LICENSE','licenses/fflate.LICENSE','licenses/saxes.LICENSE','licenses/xmlchars.LICENSE','licenses/BIT_yanhe_download.LICENSE','watch/vendor/hls.LICENSE','watch/vendor/md5.LICENSE','watch/vendor/mpegts.LICENSE','watch/vendor/mpegts.NOTICE.txt']:
+  for n in ['README.md','THIRD_PARTY_NOTICES.md','LICENSE','licenses/fflate.LICENSE','licenses/saxes.LICENSE','licenses/xmlchars.LICENSE','licenses/parse5.LICENSE','licenses/entities.LICENSE','licenses/BIT_yanhe_download.LICENSE','watch/vendor/hls.LICENSE','watch/vendor/md5.LICENSE','watch/vendor/mpegts.LICENSE','watch/vendor/mpegts.NOTICE.txt']:
    assert n in names,n
   assert not any(any(p in n.lower() for p in ['.sqlite','.env','session.json','node_modules/','test-results/','local-data/']) for n in names)
  report.append({'archive':str(archive),'personal':personal,'importableCatalog':has_import_catalog,'files':len(names),'bytes':archive.stat().st_size,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()})

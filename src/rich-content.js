@@ -9,7 +9,7 @@ export function richContent(html,doc=document){
   if(tag==='a'||tag==='img'){
    const raw=input.getAttribute(tag==='a'?'href':'src');let url;try{url=new URL(raw,'https://zy-eclass.bit.edu.cn');}catch{return;}
    if(url.protocol!=='https:'||url.username||url.password)return;
-   if(tag==='img'&&!['zy-eclass.bit.edu.cn','aita.yanhekt.cn'].includes(url.hostname))return;
+   if(tag==='img'&&!['zy-eclass.bit.edu.cn','aita.yanhekt.cn','lexue.bit.edu.cn'].includes(url.hostname))return;
    el.setAttribute(tag==='a'?'href':'src',url.href);if(tag==='a'){el.target='_blank';el.rel='noopener noreferrer';}else{el.alt=input.getAttribute('alt')||'';el.loading='lazy';}
   }
   if(['td','th'].includes(tag))for(const attr of ['colspan','rowspan']){const n=Number(input.getAttribute(attr));if(n>0&&n<100)el.setAttribute(attr,String(n));}

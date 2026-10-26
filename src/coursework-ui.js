@@ -2,14 +2,14 @@ import {downloadAttachment,downloadStatus} from './remote-client.js';
 import {richContent} from './rich-content.js';
 import {MAX_UPLOAD_BYTES} from './lms-writer.js';
 
-export function courseworkUi({root,lms,node,button,link,loading,empty,toast,deadline,onSubmitted}){
+export function courseworkUi({root,lms,lexue,node,button,link,loading,empty,toast,deadline,onSubmitted}){
  const $=id=>root.querySelector('#'+id),dialog=$('resources-dialog'),content=$('resource-content');let generation=0,busy=false;
  const bytes=n=>n>=1048576?`${(n/1048576).toFixed(1)} MB`:n>=1024?`${(n/1024).toFixed(1)} KB`:`${n||0} B`;
  dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});dialog.addEventListener('close',()=>generation++);
  $('close-dialog').onclick=()=>{if(!busy)dialog.close();};
  function open(title,wide=false){generation++;dialog.classList.toggle('task-dialog',wide);dialog.querySelector('h2').textContent=title;content.replaceChildren(loading());if(!dialog.open)dialog.showModal();return generation;}
  const current=g=>g===generation&&dialog.open;
- async function files(row){return row.source==='lms'?lms.resources(row.courseId,row.id):row.attachments||[];}
+ async function files(row){return row.source==='lexue'?lexue.resources(row.courseId,row.id):row.source==='lms'?lms.resources(row.courseId,row.id):row.attachments||[];}
  async function download(row,file,status){
   status.disabled=true;status.textContent='下载中…';
   try{
@@ -20,9 +20,9 @@ export function courseworkUi({root,lms,node,button,link,loading,empty,toast,dead
   finally{status.disabled=false;}
  }
  function attachment(row,file){const action=button('下载',()=>void download(row,file,action),'text-button',{disabled:file.download?null:'',title:file.download?'下载附件':'未开放下载'});
-  return node('div',{class:'attachment-row'},node('div',{class:'attachment-name'},file.name,node('small',{},bytes(file.size))),action);
+  return node('div',{class:'attachment-row'},node('div',{class:'attachment-name'},file.name,file.size?node('small',{},bytes(file.size)):null),action);
  }
- async function resources(row){const g=open(row.title);try{const list=await files(row);if(!current(g))return;content.replaceChildren(...(list.length?list.map(f=>attachment(row,f)):[empty('暂无附件')]),node('div',{class:'dialog-footer'},link('原站',row.url,'text-button')));}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void resources(row)),link('原站',row.url,'text-button')]));}}
+ async function resources(row){const g=open(row.title);try{const data=row.source==='lexue'?await lexue.material(row.courseId,row.id):{attachments:await files(row)},list=data.attachments;if(!current(g))return;content.replaceChildren(...(data.description?[richContent(data.description)]:[]),...(list.length?list.map(f=>attachment(row,f)):data.description?[]:[empty('暂无附件')]),node('div',{class:'dialog-footer'},link('原站',row.url,'text-button')));}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void resources(row)),link('原站',row.url,'text-button')]));}}
  function allButton(rows,title){const action=button('全部下载',()=>void downloadAll(rows,title),'attachment-button',{'aria-label':'下载本课全部资料附件',disabled:rows.length?null:''});return action;}
  async function downloadAll(rows,title){
   const g=open('下载资料');const queue=[],failures=[];const seen=new Set();let total=0,finished=0,failed=0,stopped=false;
@@ -35,9 +35,9 @@ export function courseworkUi({root,lms,node,button,link,loading,empty,toast,dead
   }
   if(current(g)){progress.textContent=`已下载 ${finished} / ${total}${failed?'，失败 '+failed:''}${stopped?' · 已停止':''}`;cancel.remove();if(!total&&!failures.length)progress.textContent='暂无可下载附件';for(const message of failures)list.append(node('p',{class:'inline-notice'},message));}
  }
- async function task(row){const g=open(row.title,true);try{const data=await lms.task(row.courseId,row.id);if(current(g))renderTask(row,data,g);}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void task(row)),link('原站',row.url,'text-button')]));}}
+ async function task(row){const g=open(row.title,true);try{const data=await (row.source==='lexue'?lexue:lms).task(row.courseId,row.id);if(current(g))renderTask(row,data,g);}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void task(row)),link('原站',row.url,'text-button')]));}}
  function renderTask(row,data,g){
-  const meta=node('div',{class:'task-meta'},node('span',{},deadline(data.deadline)),node('span',{},data.group?data.groupName||'小组作业':'个人作业'),data.limit!==null?node('span',{},`已提交 ${data.used} / ${data.limit} 次`):null,link('原站',row.url,'text-button'));
+  const meta=node('div',{class:'task-meta'},node('span',{},deadline(data.deadline)),data.group==null?null:node('span',{},data.group?data.groupName||'小组作业':'个人作业'),data.limit!==null?node('span',{},`已提交 ${data.used} / ${data.limit} 次`):null,link('原站',row.url,'text-button'));
   const description=richContent(data.description),attachments=node('div',{class:'task-attachments'},data.attachments.map(f=>attachment(row,f)));
   const history=node('details',{class:'submission-history'},node('summary',{},data.historyError?'提交记录 · 未同步':`提交记录 · ${data.submissions.filter(s=>!s.draft).length}`),data.historyError?button('刷新记录',()=>void task(row),'text-button'):null,data.submissions.map(s=>node('section',{class:'submission-entry'},node('div',{class:'task-meta'},node('span',{},s.draft?'原站草稿':s.redo?'待重新提交':'已提交'),node('time',{},s.createdAt?new Date(s.createdAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'')),richContent(s.comment),s.attachments.map(f=>attachment({...row,submissionId:s.id},f)))));
   const form=node('form',{class:'submission-form'}),comment=node('textarea',{'aria-label':'作业内容',placeholder:'作业内容',rows:5,maxlength:100000}),picked=node('div',{class:'picked-files'}),notice=node('p',{class:'submission-notice',role:'status'});let selected=[],inFlight=false,requestId=crypto.randomUUID();const uploaded=new Map();
@@ -69,7 +69,7 @@ export function courseworkUi({root,lms,node,button,link,loading,empty,toast,dead
    finally{freeze(false);if(!submit.hidden)submit.textContent='提交作业';}
   });
   const editor=data.submissions.some(s=>!s.draft)?node('details',{class:'resubmit-form'},node('summary',{},'再次提交'),form):form;
-  content.replaceChildren(meta,description,attachments,history,data.canSubmit?editor:node('div',{class:'dialog-footer'},node('span',{class:'muted'},data.submitReason),link('在原站查看',row.url,'button-link')));
+  content.replaceChildren(meta,description,attachments,history,data.canSubmit?editor:node('div',{class:'dialog-footer'},node('span',{class:'muted'},data.submitReason),link(data.nativeAction||'在原站查看',row.url,'button-link')));
  }
  return {resources,task,allButton};
 }

@@ -22,6 +22,6 @@ for(const size of [16,32,48,128]){const raw=Buffer.alloc((size*4+1)*size);for(le
 await mkdir(join(out,'licenses'),{recursive:true});
 await copyTree(join(root,'licenses'),join(out,'licenses'));
 for(const [from,name]of [['node_modules/fflate/LICENSE','fflate.LICENSE']])await copyFile(join(root,from),join(out,'licenses',name));
-for(const packageName of ['saxes','xmlchars']){for(const name of ['LICENSE','LICENSE.txt'])try{await copyFile(join(root,'node_modules',packageName,name),join(out,'licenses',packageName+'.LICENSE'));break;}catch(e){if(e.code!=='ENOENT')throw e;}}
+for(const packageName of ['saxes','xmlchars','parse5','entities']){for(const name of ['LICENSE','LICENSE.txt'])try{await copyFile(join(root,'node_modules',packageName,name),join(out,'licenses',packageName+'.LICENSE'));break;}catch(e){if(e.code!=='ENOENT')throw e;}}
 await copyFile(join(root,'LICENSE'),join(out,'LICENSE'));
 console.log(JSON.stringify({version:pkg.version,extension:out,localCatalog:info.catalog?.count||0}));

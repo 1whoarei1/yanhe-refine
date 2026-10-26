@@ -5,7 +5,7 @@ import {siteRoute,isPlatformPage} from './site-routes.js';
 async function rules(){await chrome.declarativeNetRequest.updateSessionRules({removeRuleIds:[1,2],addRules:[referrerRule(chrome.runtime.id),legacyReferrerRule(chrome.runtime.id)]});}
 chrome.runtime.onInstalled.addListener(()=>rules().catch(()=>{}));chrome.runtime.onStartup.addListener(()=>rules().catch(()=>{}));
 chrome.action.onClicked.addListener(async tab=>{
- if(isPlatformPage(tab.url)&&!tab.url.startsWith('https://zy-eclass.')){
+ if(isPlatformPage(tab.url)&&!['zy-eclass.bit.edu.cn','lexue.bit.edu.cn'].includes(new URL(tab.url).hostname)){
   if(siteRoute(tab.url)){await chrome.tabs.sendMessage(tab.id,{type:'REFINE_RESTORE'}).catch(()=>{});return;}
   const u=new URL(tab.url);u.searchParams.delete('yh_native');await chrome.tabs.update(tab.id,{url:siteRoute(u.href)?u.href:'https://aita.yanhekt.cn/portal/#/'});
  }else await chrome.tabs.create({url:'https://aita.yanhekt.cn/portal/#/'});

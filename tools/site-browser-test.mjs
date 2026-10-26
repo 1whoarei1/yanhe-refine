@@ -28,11 +28,11 @@ try{
  // Keep Chromium's actual disk download + progress API; replace only the fixture URL at its boundary.
  // Browser downloads bypass Playwright request routing, so never send these synthetic IDs to a real host.
  await worker.evaluate(()=>{const download=chrome.downloads.download.bind(chrome.downloads);globalThis.fixtureDownloads=[];chrome.downloads.download=async options=>{
-  if(!['https://zy-eclass.bit.edu.cn/api/uploads/reference/5001/blob','https://aita.yanhekt.cn/fixture/outline.txt'].includes(options.url))throw new Error('Unexpected fixture download');
+  if(!['https://zy-eclass.bit.edu.cn/api/uploads/reference/5001/blob','https://aita.yanhekt.cn/fixture/outline.txt',...['slides.pdf','helper.pdf','instructions.zip'].map(name=>'https://lexue.bit.edu.cn/pluginfile.php/1901/mod_resource/content/0/'+name+'?forcedownload=1')].includes(options.url))throw new Error('Unexpected fixture download');
   globalThis.fixtureDownloads.push(options);return download({...options,url:'data:text/plain;base64,c3ludGhldGljIGF0dGFjaG1lbnQ='});
  };});
  report.browserVersion=context.browser()?.version();
- const errors=[],requests=[],unexpected=[];let offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1,submitted=null,submissionPosts=0;
+ const errors=[],requests=[],unexpected=[];let offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1,submitted=null,submissionPosts=0,lexueConnected=false;
  context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='warning')console.log(m.text());});});
  const modernToken='desk-test-opaque-0123456789',oldToken='d'.repeat(32);
  const cookie=encodeURIComponent(`a:2:{i:0;s:6:"_token";i:1;s:${modernToken.length}:"${modernToken}";}`);
@@ -45,8 +45,22 @@ try{
  const liveRow={id:1630190,sub_title:'强化学习 · 第八讲',type:'course_live',playback_status:'0',sub_status:'1',class_begin:Math.floor(now/1000)-1000};
  await context.route('https://**/*',async route=>{
   const req=route.request(),u=new URL(req.url()),path=u.pathname;requests.push({host:u.hostname,path,method:req.method()});
-  assert.ok(['GET','HEAD'].includes(req.method())||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/fixture-upload/9001','/api/course/activities/2413/submissions'].includes(path)),'only explicit synthetic coursework writes are allowed');
+  const moodleRead=u.hostname==='lexue.bit.edu.cn'&&path==='/lib/ajax/service.php'&&req.method()==='POST';
+  if(moodleRead)assert.deepEqual(req.postDataJSON().map(r=>r.methodname),['core_course_get_enrolled_courses_by_timeline_classification']);
+  assert.ok(['GET','HEAD'].includes(req.method())||moodleRead||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/fixture-upload/9001','/api/course/activities/2413/submissions'].includes(path)),'only named Moodle reads and explicit synthetic coursework writes are allowed');
   const json=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  if(u.hostname==='lexue.bit.edu.cn'){
+   const html=body=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html><body class="course-20290"><main id="region-main">'+body+'</main></body></html>'});
+   if(!lexueConnected)return html('<button id="loginbtn">Login</button>');
+   const file=name=>'https://lexue.bit.edu.cn/pluginfile.php/1901/mod_resource/content/0/'+name+'?forcedownload=1';
+   if(path==='/my/')return html('<script>window.M={};M.cfg={"wwwroot":"https://lexue.bit.edu.cn","sesskey":"syntheticMoodle123"};</script><h1>旧乐学课程</h1>');
+   if(path==='/lib/ajax/service.php')return json([{error:false,data:{courses:[{id:20290,fullname:'旧乐学示例课程',startdate:1790000000,visible:true}],nextoffset:1}}]);
+   if(path==='/course/view.php')return html([[9001,'resource','旧乐学课件'],[9002,'folder','旧乐学文件夹'],[2413,'assign','旧乐学示例作业']].map(([id,type,title])=>`<li id="module-${id}" class="activity modtype_${type}"><div class="activityinstance"><a href="/mod/${type}/view.php?id=${id}"><span class="instancename">${title}<span class="accesshide">文件</span></span></a></div></li>`).join(''));
+   if(path==='/mod/resource/view.php')return route.fulfill({status:302,headers:{Location:file('slides.pdf')},body:''});
+   if(path==='/mod/folder/view.php')return html(['slides.pdf','helper.pdf','helper.pdf'].map(name=>`<a href="${file(name)}">${name}</a>`).join(''));
+   if(path==='/mod/assign/view.php')return html(`<div id="intro"><h3>旧乐学作业正文</h3><p>截止时间2026年11月27日24:00</p><a href="${file('instructions.zip')}">instructions.zip</a><script>window.moodleInjection=true</script></div><table class="submissionstatustable"><tr><th>作业状态</th><td>没有尝试</td></tr></table>`);
+   if(path.startsWith('/pluginfile.php/'))return route.fulfill({status:206,contentType:'application/pdf',headers:{'Content-Range':'bytes 0-0/23','Content-Disposition':'attachment; filename="slides.pdf"'},body:'x'});
+  }
   if(u.hostname==='zy-eclass.bit.edu.cn'){
    if(lmsOffline)return route.fulfill({status:200,contentType:'text/html',body:'<html>Login</html>'});
    if(path==='/api/my-courses')return json({courses:[{id:20290,name:'计算机视觉',course_code:'EL3105',academic_year:'2026-2027',semester:1}]});
@@ -157,6 +171,15 @@ try{
  await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 1 / 1',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();
  await page.getByLabel('课程',{exact:true}).selectOption('modern:21:110118');await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 1 / 1',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();
  assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,3);report.checks.push('single/batch attachment downloads save synthetic bytes through Chromium, deduplicate references and support both LMS and modern resource IDs');
+ lexueConnected=true;await page.locator('#refresh').click();await page.getByLabel('课程',{exact:true}).locator('option[value="lexue:20290"]').waitFor({state:'attached'});await page.getByLabel('课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).waitFor();assert.equal(await page.locator('.material-row').count(),2);
+ await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).click();await page.getByText('helper.pdf',{exact:true}).waitFor();assert.equal(await page.locator('.attachment-row').count(),2);await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 2 / 2',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,5);
+ await page.getByRole('link',{name:'待办',exact:true}).click();await page.getByLabel('课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学示例作业',exact:true}).click();await page.getByRole('heading',{name:'旧乐学作业正文',exact:true}).waitFor();assert.equal(await page.locator('.submission-form').count(),0);assert.equal(await page.getByRole('link',{name:'在旧乐学提交',exact:true}).count(),1);assert.equal(await page.locator('.task-attachments .attachment-row').count(),1);assert.equal(await page.evaluate(()=>window.moodleInjection),undefined);
+ await page.getByRole('button',{name:'下载',exact:true}).click();await page.getByRole('button',{name:'已下载',exact:true}).waitFor({timeout:20000});await page.setViewportSize({width:375,height:900});assert.equal(await page.locator('#resources-dialog').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);await page.screenshot({path:join(output,'site-lexue-task-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByLabel('课程',{exact:true}).selectOption('lms:20290');assert.equal(await page.getByRole('button',{name:'旧乐学示例作业',exact:true}).count(),0);assert.equal(submissionPosts,1);assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,6);
+ await page.getByRole('link',{name:'课程',exact:true}).first().click();await page.getByRole('heading',{name:'旧乐学课程',exact:true}).waitFor();await page.getByRole('link',{name:'旧乐学示例课程',exact:true}).click();await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).waitFor();assert.match(page.url(),/yh_course=lexue%3A20290/);
+ await visit(page,'https://aita.yanhekt.cn/coursedetail?course_id=102178&tenant_code=21&yh_tab=materials');await page.getByLabel('关联乐学课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).waitFor();assert.equal((await worker.evaluate(()=>chrome.storage.local.get('desk:mappings')))['desk:mappings']['modern:21:102178'],'lexue:20290');assert.equal(await page.getByRole('button',{name:'旧乐学示例作业',exact:true}).count(),1);
+ report.checks.push('old Moodle courses, folders, direct files and assignment attachments sync in place; colliding LMS IDs remain separate, downloads deduplicate and submissions retain the official Moodle action');
  await page.getByRole('link',{name:'更多',exact:true}).click();await page.getByRole('heading',{name:'更多',exact:true}).waitFor();await page.screenshot({path:join(output,'site-more.png'),fullPage:true});assert.equal(await page.getByRole('link',{name:'我的笔记',exact:true}).count(),1);
  await page.getByRole('link',{name:'我的笔记',exact:true}).click();await page.getByRole('heading',{name:'原站功能',exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.nativeStarted),true);await page.getByRole('textbox',{name:'原站输入'}).fill('保留原站操作');await page.getByRole('button',{name:'原站操作'}).click();await page.getByRole('button',{name:'已操作'}).waitFor();report.checks.push('secondary features are collected in More and their original native application still works');
  await page.getByRole('link',{name:'返回延河课堂焕新版'}).click();await page.locator('.course-row').first().waitFor();await page.getByRole('link',{name:'恢复原版',exact:true}).click();await page.getByRole('heading',{name:'原站功能',exact:true}).waitFor();assert.ok(new URL(page.url()).searchParams.has('yh_native'));report.checks.push('restore-original mode returns to the current native route without modifying account state');

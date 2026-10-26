@@ -22,5 +22,13 @@ export class RemoteLms{
  upload=(courseId,id,file)=>request('lmsWrite',{method:'upload',args:[courseId,id,file]});
  submit=(courseId,id,payload)=>request('lmsWrite',{method:'submit',args:[courseId,id,payload]});
 }
+export class RemoteLexue{
+ courses=force=>request('lexue',{method:'courses',args:[Boolean(force)]});
+ homeworks=id=>request('lexue',{method:'homeworks',args:[id]});
+ materials=id=>request('lexue',{method:'materials',args:[id]});
+ resources=(courseId,id)=>request('lexue',{method:'resources',args:[courseId,id]});
+ material=(courseId,id)=>request('lexue',{method:'material',args:[courseId,id]});
+ task=(courseId,id)=>request('lexue',{method:'task',args:[courseId,id]});
+}
 export const downloadAttachment=args=>request('download',args);
 export const downloadStatus=ids=>request('downloadStatus',{ids});

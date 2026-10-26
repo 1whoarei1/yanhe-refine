@@ -1,8 +1,10 @@
 import {LmsReader} from './lms-reader.js';
+import {LexueReader} from './lexue-reader.js';
 import {siteRoute,siteHref} from './site-routes.js';
 import {mountSite} from './site-entry.js';
 if(window.top===window){
  const own=chrome.runtime.getURL(''),reader=location.origin==='https://zy-eclass.bit.edu.cn'?new LmsReader():null;
+ const oldReader=location.origin==='https://lexue.bit.edu.cn'?new LexueReader():null;
  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(sender.id!==chrome.runtime.id||!(sender.url?.startsWith(own)||(!sender.url&&!sender.tab)))return;
   if(message.type==='READ_LEGACY_AUTH'&&location.origin==='https://www.yanhekt.cn'){
@@ -12,6 +14,7 @@ if(window.top===window){
    const values=document.cookie.split(';').map(x=>x.trim()).filter(x=>x.startsWith('_token=')).map(x=>x.slice(7));const token=new URL(location.href).searchParams.get('token');if(token)values.push(token);respond({values});return;
   }
   if(message.type==='DESK_LMS_READ'&&reader){reader.read(message.args||{}).then(data=>respond({ok:true,data}),e=>respond({ok:false,error:e.message}));return true;}
+  if(message.type==='DESK_LEXUE_READ'&&oldReader){oldReader.read(message.args||{}).then(data=>respond({ok:true,data}),e=>respond({ok:false,error:e.message}));return true;}
  });
  if(siteRoute(location.href)){
   // Replace only the explicit student routes; native/login pages retain their application.

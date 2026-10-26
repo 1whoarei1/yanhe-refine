@@ -48,4 +48,4 @@ export function siteHref(route){
  return u.href;
 }
 export function nativeHref(raw){const u=new URL(raw);if([modern,legacy].includes(u.origin))u.searchParams.set('yh_native','1');return u.href;}
-export function isPlatformPage(raw){try{return [modern,legacy,'https://zy-eclass.bit.edu.cn'].includes(new URL(raw).origin);}catch{return false;}}
+export function isPlatformPage(raw){try{return [modern,legacy,'https://zy-eclass.bit.edu.cn','https://lexue.bit.edu.cn'].includes(new URL(raw).origin);}catch{return false;}}

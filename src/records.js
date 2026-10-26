@@ -7,7 +7,7 @@ export function safeRecords(data){
   else if(key==='lastCourse'&&/^\d{1,12}$/.test(String(v)))result[key]=String(v);
   else if(key==='lastPlatform'&&['legacy','modern'].includes(v))result[key]=v;
   else if(key==='desk:favorites'&&Array.isArray(v))result[key]=[...new Set(v.filter(k=>/^(legacy|modern):\d{1,8}:\d{1,12}$/.test(k)))];
-  else if(key==='desk:mappings'&&v&&typeof v==='object')result[key]=Object.fromEntries(Object.entries(v).filter(([k,id])=>/^(legacy|modern):\d{1,8}:\d{1,12}$/.test(k)&&/^\d{1,12}$/.test(String(id))).map(([k,id])=>[k,String(id)]));
+  else if(key==='desk:mappings'&&v&&typeof v==='object')result[key]=Object.fromEntries(Object.entries(v).filter(([k,id])=>/^(legacy|modern):\d{1,8}:\d{1,12}$/.test(k)&&/^(?:lexue:)?\d{1,12}$/.test(String(id))).map(([k,id])=>[k,String(id)]));
  }
  return result;
 }
