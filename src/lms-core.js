@@ -54,7 +54,9 @@ export function submissionRows(body) {
 }
 export function attachmentUrl(file){
  if(file.download&&file.type==='folder'&&/^\d{1,12}$/.test(file.id))return `https://zy-eclass.bit.edu.cn/zip/uploads?timezone=-480&upload_ids=${file.id}`;
- const ref=String(file.referenceId||'');
- if(!file.download||!/^\d{1,12}$/.test(ref))throw new Error('该附件未开放下载');
- return `https://zy-eclass.bit.edu.cn/api/uploads/reference/${ref}/blob`;
+ if(!file.download)throw new Error('该附件未开放下载');
+ const ref=String(file.referenceId||''),id=String(file.id||'');
+ if(/^\d{1,12}$/.test(ref))return `https://zy-eclass.bit.edu.cn/api/uploads/reference/${ref}/blob`;
+ if(/^\d{1,12}$/.test(id))return `https://zy-eclass.bit.edu.cn/api/uploads/${id}/blob`;
+ throw new Error('该附件未开放下载');
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "延河焕新",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "直接重构延河课堂原站：整合导航、课程发现、直录播、平台字幕和学习资料。",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -14,7 +14,8 @@
     "https://*.yanhekt.cn/*",
     "https://yanhe.bit.edu.cn/*",
     "https://zy-eclass.bit.edu.cn/*",
-    "https://lexue.bit.edu.cn/*"
+    "https://lexue.bit.edu.cn/*",
+    "https://zy-media.bit.edu.cn/*"
   ],
   "action": {
     "default_title": "切换原版 / 焕新版",
@@ -74,6 +75,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; worker-src 'self'; object-src 'none'; connect-src 'self' https://*.yanhekt.cn https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data: https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn https://aita.yanhekt.cn; style-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'self' https://aita.yanhekt.cn https://www.yanhekt.cn;"
+    "extension_pages": "script-src 'self'; worker-src 'self'; object-src 'none'; connect-src 'self' https://zy-media.bit.edu.cn https://*.yanhekt.cn https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data: https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn https://aita.yanhekt.cn; style-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'self' https://aita.yanhekt.cn https://www.yanhekt.cn;"
   }
 }

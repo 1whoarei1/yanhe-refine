@@ -47,7 +47,7 @@ try{
   const req=route.request(),u=new URL(req.url()),path=u.pathname;requests.push({host:u.hostname,path,method:req.method()});
   const moodleRead=u.hostname==='lexue.bit.edu.cn'&&path==='/lib/ajax/service.php'&&req.method()==='POST';
   if(moodleRead)assert.deepEqual(req.postDataJSON().map(r=>r.methodname),['core_course_get_enrolled_courses_by_timeline_classification']);
-  assert.ok(['GET','HEAD'].includes(req.method())||moodleRead||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/fixture-upload/9001','/api/course/activities/2413/submissions'].includes(path)),'only named Moodle reads and explicit synthetic coursework writes are allowed');
+  assert.ok(['GET','HEAD'].includes(req.method())||moodleRead||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/api/course/activities/2413/submissions'].includes(path))||(u.hostname==='zy-media.bit.edu.cn'&&path==='/upload/file/9001'&&['PUT','OPTIONS'].includes(req.method())),'only named Moodle reads and explicit synthetic coursework writes are allowed');
   const json=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   if(u.hostname==='lexue.bit.edu.cn'){
    const html=body=>route.fulfill({status:200,contentType:'text/html',body:`<!doctype html><html><body class="course-${path==='/course/view.php'?u.searchParams.get('id'):'20290'}"><main id="region-main">${body}</main></body></html>`});
@@ -62,6 +62,10 @@ try{
    if(path==='/mod/assign/view.php')return html(`<div id="intro"><h3>旧乐学作业正文</h3><p>截止时间2026年11月27日24:00</p><a href="${file('instructions.zip')}">instructions.zip</a><script>window.moodleInjection=true</script></div><table class="submissionstatustable"><tr><th>作业状态</th><td>没有尝试</td></tr></table>`);
    if(path.startsWith('/pluginfile.php/'))return route.fulfill({status:206,contentType:'application/pdf',headers:{'Content-Range':'bytes 0-0/23','Content-Disposition':'attachment; filename="slides.pdf"'},body:'x'});
   }
+  if(u.hostname==='zy-media.bit.edu.cn'&&path==='/upload/file/9001'){
+   assert.equal(req.method(),'PUT');assert.equal(req.headers()['x-xsrf-token'],undefined);assert.equal(req.headers().cookie,undefined);
+   assert.match(req.headers()['content-type'],/multipart\/form-data/);assert.ok(req.postDataBuffer().includes(Buffer.from('synthetic answer')));return route.fulfill({body:''});
+  }
   if(u.hostname==='zy-eclass.bit.edu.cn'){
    if(lmsOffline)return route.fulfill({status:200,contentType:'text/html',body:'<html>Login</html>'});
    if(path==='/api/my-courses')return json({courses:[{id:20290,name:'计算机视觉',course_code:'EL3105',academic_year:'2026-2027',semester:1},...(crossCourse?[[20291,'操作系统'],[20292,'计算机组成与原理']].map(([id,name])=>({id,name,academic_year:'2026-2027',semester:1})):[])]});
@@ -73,8 +77,7 @@ try{
    if(/^\/api\/activities\/(300\d|2413)\/resources$/.test(path))return json({uploads:[attachment,{name:'deleted.pdf',deleted:true}]});
    if(path==='/api/activities/2413')return json({id:2413,course_id:20290,type:'homework',title:'相机标定',published:true,is_in_progress:true,non_submit_times:true,user_submit_count:submitted?1:0,end_time:iso(now+86400000),data:{description:'<h3>实验要求</h3><p>实现相机标定并提交代码。</p><table><tr><td>输入</td><td>合成图像</td></tr></table><script>window.evilExecuted=true</script><img src="javascript:alert(1)" onerror="window.evilExecuted=true"><a href="javascript:alert(1)">坏链接</a>',homework_type:'file_upload',mode:'normal'},uploads:[attachment]});
    if(path==='/api/activities/2413/students/7/submission_list')return json({list:submitted?[submitted]:[]});
-   if(path==='/api/uploads'&&req.method()==='POST'){assert.equal(req.headers()['x-xsrf-token'],'fixture csrf');assert.equal(req.postDataJSON().name,'answer.zip');return json({id:9001,upload_url:'/fixture-upload/9001',storage_type:'LOCAL'});}
-   if(path==='/fixture-upload/9001'&&req.method()==='PUT'){assert.match(req.headers()['content-type'],/multipart\/form-data/);assert.ok(req.postDataBuffer().includes(Buffer.from('synthetic answer')));return route.fulfill({body:''});}
+   if(path==='/api/uploads'&&req.method()==='POST'){assert.equal(req.headers()['x-xsrf-token'],'fixture csrf');assert.equal(req.postDataJSON().name,'answer.zip');return json({id:9001,upload_url:'https://zy-media.bit.edu.cn/upload/file/9001',storage_type:'MEDIA',transcoder:'MEDIA'});}
    if(path==='/api/uploads/9001')return json({id:9001,status:'ready'});
    if(path==='/api/course/activities/2413/submissions'&&req.method()==='POST'){submissionPosts++;assert.deepEqual(req.postDataJSON().uploads,[9001]);submitted={id:9002,comment:req.postDataJSON().comment,is_draft:false,created_at:iso(now),uploads:[{...attachment,id:9001,reference_id:9003,name:'answer.zip'}]};return json({submission:{id:9002}});}
    if(path==='/api/uploads/reference/5001/blob')return route.fulfill({contentType:'text/plain',headers:{'Content-Disposition':'attachment; filename=lecture.txt'},body:'synthetic lecture'});
