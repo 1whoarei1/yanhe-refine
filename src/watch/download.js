@@ -63,9 +63,9 @@ window.addEventListener('beforeunload',event=>{if(busy){event.preventDefault();e
 async function load(){
  try{
   context=downloadRequest(new URLSearchParams(location.search));api=context.legacy?new LegacyYanheApi():new YanheApi();
-  course=await api.course(context.courseId);lecture=course.replays.find(row=>row.id===context.lectureId);
-  if(!lecture)throw new Error('未找到可下载的回放课次');
-  info=await api.lecture(context.courseId,context.lectureId);const available=replayViews(info);if(!available.length)throw new Error('当前课次没有可下载回放');
+  course=await api.course(context.courseId,undefined,{sessionId:context.legacy?context.lectureId.split(':')[0]:undefined});lecture=course.replays.find(row=>row.id===context.lectureId);
+  if(!lecture&&!context.legacy)throw new Error('未找到可下载的回放课次');
+  info=await api.lecture(context.courseId,context.lectureId);lecture=info.selection||lecture;if(!lecture)throw new Error('未找到可下载的回放课次');const available=replayViews(info);if(!available.length)throw new Error('当前课次没有可下载回放');
   $('course-title').textContent=course.title;$('lecture-title').textContent=lecture.title;document.title=course.title+' · 视频下载';
   for(const view of available){
    const item=document.createElement('div');item.className='channel';item.dataset.view=view;

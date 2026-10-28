@@ -40,3 +40,7 @@
 .transcript-content>input{margin-bottom:12px}
 #platform{padding:10px 9px;font-size:13px}
 @media(max-width:720px){#platform{margin-bottom:10px}}
+
+/* Match the same readable control scale in embedded and standalone players. */
+.subtitle-calibration,.subtitle-mode-row,.subtitle-mode-row time,.transcript-pane .subtitle-mode-row button,#offset-help,#calibration-status{font-size:13px}
+.subtitle-calibration button{font-size:13px;min-height:32px}.transcript-pane .subtitle-item{font-size:18px}.transcript-pane .subtitle-item time{font-size:12px}.subtitle-gap{font-size:13px}#platform{font-size:15px}

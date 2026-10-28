@@ -1,4 +1,7 @@
 import md5 from 'blueimp-md5';
+import {AutoSlidesIndex} from './watch/autoslides-index.js';
+import {normalizeCourse} from './catalog-core.js';
+const legacyIndex=new AutoSlidesIndex();
 import {CourseSources} from './platform-api.js';
 import {LmsClient} from './lms-client.js';
 import {LexueClient} from './lexue-client.js';
@@ -29,6 +32,10 @@ export async function readOperation(operation,args={}){
   return catalogOperation(type,data);
  }
  if(operation==='legacy'&&args.method==='enrolled')return sources.enrolledLegacy();
+ if(operation==='legacyIndex'){
+  if(!['terms','search'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的索引读取');
+  const data=await legacyIndex[args.method](...args.args);return args.method==='search'?{...data,rows:data.rows.map(row=>normalizeCourse(row,'legacy')).filter(Boolean)}:data;
+ }
  if(operation==='modern'){
   const methods=['enrolled','search','today','otherTeacherCourses','materials'];if(!methods.includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的课堂读取');
   if(['otherTeacherCourses','materials'].includes(args.method))numeric(args.args[0]);

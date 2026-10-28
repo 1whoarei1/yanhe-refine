@@ -1,3 +1,4 @@
+import {termLabel} from './catalog-core.js';
 const platforms=['lms','lexue'];
 
 // Keep failures separate from successful course lists so login recovery can refresh one site.
@@ -8,7 +9,7 @@ export class TeachingCourses{
   const slot=this.slots.get(source);if(slot.flight){if(!force||slot.forced)return slot.flight;await slot.flight;return this.one(source,true);}
   if(!force&&slot.loaded&&this.now()-slot.at<(slot.error?5000:120000))return;
   slot.forced=Boolean(force);slot.flight=Promise.resolve().then(async()=>{
-   try{const rows=await this.clients[source].courses(force);if(!Array.isArray(rows))throw new Error('课程列表格式异常');slot.rows=rows.map(row=>({...row,source}));slot.error=null;}
+   try{const rows=await this.clients[source].courses(force);if(!Array.isArray(rows))throw new Error('课程列表格式异常');slot.rows=rows.map(row=>({...row,term:termLabel(row.term),source}));slot.error=null;}
    catch(error){slot.rows=[];slot.error=error;}
    finally{slot.loaded=true;slot.at=this.now();}
   }).finally(()=>slot.flight=null);return slot.flight;

@@ -1,6 +1,6 @@
 {
   "name": "yanhe-refine",
-  "version": "0.9.3",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "延河焕新：直接在延河课堂原站整合导航、课程、直录播、资料与待办。",
@@ -9,9 +9,17 @@
     "build": "node tools/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:browser": "node tools/site-browser-test.mjs",
+    "test:browser:mode": "node tools/site-mode-browser-test.mjs",
     "test:fixtures": "node tools/generate-fixtures.mjs",
     "catalog": "python tools/prepare-catalog.py",
-    "package": "python tools/package.py"
+    "package": "python tools/package.py",
+    "test:browser:index": "node tools/index-browser-test.mjs",
+    "test:browser:self-index": "node tools/self-index-browser-test.mjs",
+    "test:browser:layout": "node tools/viewer-layout-browser-test.mjs",
+    "test:browser:live-features": "node tools/live-features-browser-test.mjs",
+    "test:browser:streams": "node tools/three-stream-browser-test.mjs",
+    "test:browser:imports": "node tools/catalog-import-browser-test.mjs",
+    "test:browser:metadata": "node tools/metadata-browser-test.mjs"
   },
   "dependencies": {
     "blueimp-md5": "2.19.0",

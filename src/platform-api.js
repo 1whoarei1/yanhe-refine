@@ -2,7 +2,7 @@ import {YanheApi} from './watch/api.js';
 import {LegacyYanheApi} from './watch/legacy-api.js';
 import {parseCourse,replayRows} from './watch/core.js';
 import {liveRows} from './watch/live-core.js';
-import {normalizeCourse,text} from './catalog-core.js';
+import {normalizeCourse,text,termLabel} from './catalog-core.js';
 import {schoolEpoch} from './lms-core.js';
 
 export class PlatformApi extends YanheApi {
@@ -20,7 +20,7 @@ export class PlatformApi extends YanheApi {
  }
  async search(q='',page=1,filters={}){
   await this.authenticate();const params={tenant:this.profile.tenant_id,title:q,order:'c.created_at desc',page,per_page:40};
-  if(filters.term){const terms=await this.json('/vlabpassportapi/v1/course/term-list',{}, {codes:[1000,0,200]});const t=terms.params?.list?.find(x=>x.term_name===filters.term);if(t)params.term=t.id;else return {rows:[],total:0};}
+  if(filters.term){const selected=termLabel(filters.term);if(!selected)return {rows:[],total:0};const terms=await this.json('/vlabpassportapi/v1/course/term-list',{}, {codes:[1000,0,200]});const t=terms.params?.list?.find(x=>termLabel(x.term_name)===selected);if(t)params.term=t.id;else return {rows:[],total:0};}
   if(filters.college){const body=await this.json('/vlabpassportapi/v1/user/structures',{}, {codes:[1000,0,200]});let found;
    const walk=v=>{if(Array.isArray(v))v.forEach(walk);else if(v&&typeof v==='object'){if(v.display_name===filters.college)found=v.id;Object.values(v).filter(x=>x&&typeof x==='object').forEach(walk);}};walk(body.params?.data);
    if(found==null)return {rows:[],total:0};params['struc_ids[]']=found;
@@ -83,7 +83,7 @@ export class CourseSources {
  async resolve(value,platform){const ref=parseCourse(value,platform);return ref.legacy?this.legacy.resolve(ref):ref;}
  async detail(platform,id,options={}){
   if(platform==='modern')return this.modern.detail(id,options);
-  const data=await this.legacy.course(id,undefined,options);return {...normalizeCourse({...data,platform:'legacy'}),replays:data.replays,lives:[]};
+  const data=await this.legacy.course(id,undefined,options);return {...normalizeCourse({...data,platform:'legacy'}),replays:data.replays,lives:[],indexWarning:data.indexWarning};
  }
  reset(){this.modern.reset();this.legacy.reset();}
 }

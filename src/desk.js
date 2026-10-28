@@ -1,17 +1,20 @@
-import {courseKey,normalizeCourse,matchesCourse} from './catalog-core.js';
-import {explain} from './watch/core.js';
+import {courseKey,normalizeCourse,matchesCourse,isModernTerm,termLabel,hasSpecificTerm,courseTermOptions} from './catalog-core.js';
+import {explain,parseCourse} from './watch/core.js';
 import {safeRecords} from './records.js';
 
 import {RemoteCatalog,RemoteSources,RemoteLms,RemoteLexue} from './remote-client.js';
-import {nativeHref} from './site-routes.js';
+import {nativeHref,referenceRoute} from './site-routes.js';
 import iconMarkup from './ui-icons.svg';
 import {courseworkUi} from './coursework-ui.js';
 import {TeachingCourses} from './teaching-courses.js';
 import {bindingSource,resolveBinding,setBinding,setBindingSource,safeBindings} from './course-bindings.js';
 import {CourseworkCache} from './coursework-cache.js';
 
-export function startDesk({root=document,currentRoute=()=>location.hash.slice(1)||'/today',navigate,hrefForRoute=value=>value,site=false}={}){
+export function startDesk({root=document,currentRoute=()=>location.hash.slice(1)||'/today',navigate,replaceRoute,hrefForRoute=value=>value,site=false}={}){
 const $=id=>root.querySelector('#'+id),main=$('content');
+let sidebarChanged=false;
+function sidebarCollapsed(value){const button=$('toggle-sidebar');root.querySelector('.sidebar').hidden=value;root.querySelector('.shell').classList.toggle('sidebar-collapsed',value);button.setAttribute('aria-expanded',String(!value));button.setAttribute('aria-label',value?'显示侧边栏':'隐藏侧边栏');button.title=value?'显示侧边栏':'隐藏侧边栏';}
+$('toggle-sidebar').addEventListener('click',()=>{sidebarChanged=true;const value=!root.querySelector('.sidebar').hidden;sidebarCollapsed(value);void chrome.storage.local.set({'desk:sidebarCollapsed':value}).catch(()=>{});});
 const sources=new RemoteSources(),lms=new RemoteLms(),lexue=new RemoteLexue(),catalog=new RemoteCatalog();
 const teaching=new TeachingCourses({lms,lexue});
 const symbols=new DOMParser().parseFromString(iconMarkup,'image/svg+xml');
@@ -24,13 +27,13 @@ function toast(value){$('toast').textContent=value;$('toast').hidden=false;clear
 function diagnostic(name,error){const message=explain(error);state.diagnostics.unshift(`${name}：${message}`);state.diagnostics=state.diagnostics.slice(0,20);return message;}
 function node(tag,attrs={},...children){const el=document.createElement(tag);for(const [k,v]of Object.entries(attrs)){if(v==null)continue;if(k==='class')el.className=v;else if(k==='onclick'||k==='onchange'||k==='onsubmit'||k==='oninput')el.addEventListener(k.slice(2),v);else if(k==='text')el.textContent=v;else el.setAttribute(k,k==='href'&&String(v).startsWith('#/')?hrefForRoute(v):String(v));}for(const c of children.flat(Infinity))if(c!=null)el.append(typeof c==='string'||typeof c==='number'?document.createTextNode(String(c)):c);return el;}
 function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),symbol=symbols.getElementById(name);svg.setAttribute('aria-hidden','true');svg.setAttribute('viewBox',symbol?.getAttribute('viewBox')||'0 0 24 24');if(symbol)svg.append(...Array.from(symbol.childNodes).map(n=>n.cloneNode(true)));return svg;}
-function link(label,href,cls=''){if(site&&/^https:\/\/(aita|www)\.yanhekt\.cn/.test(href))href=nativeHref(href);return node('a',{href,class:cls,...(href.startsWith('https:')?{target:site&&/yanhekt\.cn/.test(href)?'_self':'_blank',rel:'noreferrer'}:{})},label);}
+function link(label,href,cls=''){if(site&&/^https:\/\/(aita|www)\.yanhekt\.cn/.test(href))href=nativeHref(href,{remember:label==='原站'});return node('a',{href,class:cls,...(href.startsWith('https:')?{target:site&&/yanhekt\.cn/.test(href)?'_self':'_blank',rel:'noreferrer'}:{})},label);}
 function button(label,action,cls='',attrs={}){return node('button',{type:'button',class:cls,onclick:action,...attrs},label);}
 function loading(label='正在读取…'){return node('div',{class:'loading'},label);}
 function empty(label,actions=[]){return node('div',{class:'empty'},label,actions.length?node('div',{class:'inline-tools'},actions):null);}
 function route(){const raw=currentRoute();const [path,query='']=raw.split('?');return {parts:path.split('/').filter(Boolean),params:new URLSearchParams(query)};}
 function go(hash,replace=false){if(navigate){navigate(hash,replace);return;}if(location.hash===hash)void render();else if(replace)location.replace(hash);else location.hash=hash;}
-function routeTo(course,tab='watch',sub){return `#/course/${course.platform}/${course.id}?tab=${tab}${sub?'&sub='+encodeURIComponent(sub):''}`;}
+function routeTo(course,tab='watch',sub=course.sessionId){const index=course.indexSource==='autoslides'?'&index_source=autoslides':'';if(course.platform==='legacy'&&/^\d{1,12}$/.test(sub||''))return `#/session/legacy/${sub}?tab=${tab}${index}`;return `#/course/${course.platform}/${course.id}?tab=${tab}${sub?'&sub='+encodeURIComponent(sub):''}${index}`;}
 function heading(title,sub,tools=[]){return node('div',{class:'page-heading'},node('div',{},node('h1',{},title),sub?node('p',{class:'muted'},sub):null),node('div',{class:'heading-tools'},tools));}
 function tabs(items,active){return node('div',{class:'tabs',role:'tablist'},items.map(([id,label,href])=>node('a',{href,role:'tab','aria-selected':id===active?'true':'false',class:id===active?'active':''},label)));}
 function select(label,options,value,onchange){const el=node('select',{'aria-label':label,onchange:e=>onchange(e.target.value)},options.map(([v,t])=>node('option',{value:v},t)));el.value=value;return el;}
@@ -51,7 +54,7 @@ function teachingConnection(source,epoch){const old=source==='lexue';return empt
 async function pool(rows,limit,fn){const output=[];let next=0;await Promise.all(Array.from({length:Math.min(limit,rows.length)},async()=>{while(next<rows.length){const index=next++;try{output[index]={ok:true,value:await fn(rows[index])};}catch(error){output[index]={ok:false,error};}}}));return output;}
 function loginActions(kind='modern'){const url=kind==='lms'?'https://zy-eclass.bit.edu.cn/user/courses#/':kind==='legacy'?'https://www.yanhekt.cn/':'https://aita.yanhekt.cn/portal/#/';return [link('登录'+(kind==='lms'?'新乐学':kind==='legacy'?'旧版课堂':'延河课堂'),url,'button-link'),button('刷新',()=>void render(),'text-button')];}
 function favoriteButton(course){const el=button(icon('star'),async()=>{const selected=!state.favorites.has(course.key);selected?state.favorites.add(course.key):state.favorites.delete(course.key);try{await chrome.storage.local.set({'desk:favorites':[...state.favorites]});el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));}catch{selected?state.favorites.delete(course.key):state.favorites.add(course.key);toast('收藏未保存');}},'icon-button favorite'+(state.favorites.has(course.key)?' selected':''),{'aria-label':'收藏'+course.title,'aria-pressed':String(state.favorites.has(course.key)),title:'收藏'});return el;}
-function courseRow(course){return node('div',{class:'course-row','data-course-key':course.key},node('div',{},link(course.title,routeTo(course),'course-title'),node('div',{class:'course-college'},node('span',{},course.college||'课程'),node('span',{class:'course-mobile-meta'},[course.term,course.platform==='legacy'?'旧版':'新版'].filter(Boolean).join(' · ')))),button(course.teacher||'未标注',()=>go('#/courses?scope=all&q='+encodeURIComponent(course.teacher||course.title)),'teacher-button'),node('span',{class:'term'},course.term||'未标注学期'),node('span',{class:'source-label'},course.platform==='legacy'?'旧版':'新版'),favoriteButton(course));}
+function courseRow(course){return node('div',{class:'course-row','data-course-key':course.key},node('div',{},link(course.title,routeTo(course),'course-title'),node('div',{class:'course-college'},node('span',{},course.college||'课程'),node('span',{class:'course-mobile-meta'},[course.term,course.platform==='legacy'?'旧版':'新版'].filter(Boolean).join(' · ')))),button(course.teacher||'未标注',()=>go('#/courses?scope=all&platform='+course.platform+'&term='+encodeURIComponent(course.term)+'&q='+encodeURIComponent(course.teacher||course.title)),'teacher-button'),node('span',{class:'term'},course.term||'未标注学期'),node('span',{class:'source-label'},course.platform==='legacy'?'旧版':'新版'),favoriteButton(course));}
 function courseList(rows){return node('div',{class:'course-list'},rows.map(courseRow));}
 function setPage(epoch,...children){if(epoch!==state.epoch)return false;main.replaceChildren(...children.flat());return true;}
 function taskState(task){return task.state==='submitted'?['已交','submitted']:task.state==='pending'?[task.closed&&!task.makeUp?'已截止':'未交',task.closed&&!task.makeUp?'closed':'pending']:['待同步',''];}
@@ -76,13 +79,16 @@ async function todayPage(epoch){
 
 function courseHash(values){const p=new URLSearchParams(values);return '#/courses'+(p.size?'?'+p.toString():'');}
 async function coursesPage(epoch,params){
- const scope=params.get('scope')||'my',q=params.get('q')||'',platform=scope==='all'?'modern':params.get('platform')||'all',term=params.get('term')||'',teacher=params.get('teacher')||'',college=params.get('college')||'',page=Math.max(1,Number(params.get('page'))||1);
+ const scope=params.get('scope')||'my',q=params.get('q')||'',platform=scope==='all'?(params.get('platform')==='legacy'?'legacy':'modern'):['modern','legacy'].includes(params.get('platform'))?params.get('platform'):'all',term=hasSpecificTerm(params.get('term'))&&(platform!=='modern'||isModernTerm(params.get('term')))?termLabel(params.get('term')):'',teacher=params.get('teacher')||'',college=params.get('college')||'',page=Math.max(1,Number(params.get('page'))||1);
  state.lastSearch='#'+currentRoute();if((root.activeElement||document.activeElement)!==$('global-query'))$('global-query').value=q;
  const values={scope,q,platform,term,teacher,college};const change=(name,value)=>go(courseHash({...values,[name]:value,page:1}));
- const filter=node('div',{class:'filters'},scope==='all'?null:select('平台',[['all','全部平台'],['modern','新版'],['legacy','旧版']],platform,v=>change('platform',v)),select('学期',[['','全部学期'],...state.stats.terms.map(t=>[t,t])],term,v=>change('term',v)),select('学院',[['','全部学院'],...state.stats.colleges.map(t=>[t,t])],college,v=>change('college',v)));
+ const indexMode=scope==='all'&&platform==='legacy';
+ const filterTerms=state.stats.termsByPlatform?.[platform]||(platform==='modern'?state.stats.terms.filter(isModernTerm):state.stats.terms);
+ const termFilter=select('学期',[['',indexMode?'选择学期':'全部学期'],...(indexMode?[]:filterTerms).map(t=>[t,t])],term,v=>change('term',v));
+ const filter=node('div',{class:'filters'},select('平台',scope==='all'?[['modern','新版'],['legacy','旧版']]:[['all','全部平台'],['modern','新版'],['legacy','旧版']],platform,v=>go(courseHash({...values,platform:v,term:'',college:'',page:1}))),termFilter,indexMode?link('课程索引站','https://share.ruc.edu.kg/','text-button'):select('学院',[['','全部学院'],...state.stats.colleges.map(t=>[t,t])],college,v=>change('college',v)));
  const results=node('div',{},loading()),caption=node('div',{class:'list-heading'},node('span',{},'课程'),node('span',{},''));
  const pageNode=node('div',{class:'pagination'}),teaching=node('section',{class:'section-space'});
- setPage(epoch,heading('课程','',[link('导入目录','#/settings','button-link')]),tabs([['my','我的课程',courseHash({scope:'my'})],['all','全校课程',courseHash({scope:'all'})],['favorites','收藏',courseHash({scope:'favorites'})],['recent','最近',courseHash({scope:'recent'})]],scope),filter,caption,results,pageNode,teaching);
+ setPage(epoch,heading('课程','',[scope==='all'&&/^\d{1,12}$/.test(q)?link('打开旧版课次 '+q,`#/session/legacy/${q}?tab=watch`,'button-link'):null,link('导入目录','#/settings','button-link')]),tabs([['my','我的课程',courseHash({scope:'my'})],['all','全校课程',courseHash({scope:'all'})],['favorites','收藏',courseHash({scope:'favorites'})],['recent','最近',courseHash({scope:'recent'})]],scope),filter,caption,results,pageNode,teaching);
  if(scope==='my'&&platform==='all')void ensureLms().then(courses=>{if(epoch!==state.epoch)return;const rows=courses.filter(c=>c.source==='lexue'&&(!term||c.term===term)&&(!q||c.title.toLowerCase().includes(q.toLowerCase()))&&(!college||c.department===college)&&!teacher);if(rows.length)teaching.replaceChildren(node('h2',{},'旧乐学课程'),node('div',{class:'more-links'},rows.map(c=>link(c.title,`#/materials?course=${teachingKey(c)}&term=${c.term}`))));}).catch(()=>{});
  let rows=[],total=0,partial='';
  if(scope==='my'){
@@ -91,8 +97,13 @@ async function coursesPage(epoch,params){
   rows=(await Promise.all([...state.favorites].map(key=>catalog.call('get',{key})))).filter(Boolean).filter(r=>matchesCourse(r,{q,platform,term,teacher,college}));total=rows.length;rows=rows.slice((page-1)*40,page*40);
  }else if(scope==='recent'){
   rows=(await recentCourses()).map(r=>r.course).filter(r=>matchesCourse(r,{q,platform,term,teacher,college}));total=rows.length;
+ }else if(indexMode){
+  try{const meta=await sources.index.terms();if(epoch!==state.epoch)return;const validTerms=meta.terms.filter(hasSpecificTerm),chosen=term||validTerms[0]||'';values.term=chosen;const field=termFilter.matches('select')?termFilter:termFilter.querySelector('select');field.replaceChildren(new Option('选择学期',''),...validTerms.map(t=>new Option(t,t)));field.value=chosen;
+   const result=await sources.index.search(q||teacher,{page,term:chosen});rows=result.rows;total=result.total;partial=`旧版课程索引 · 尚未完整${result.reportedTotal>total?' · 共匹配 '+result.reportedTotal+' 门，仅返回前 '+total+' 门':''}${result.truncated?' · 候选范围受限':''}`;if(rows.length)await catalog.call('upsert',{rows}).catch(()=>{});
+  }catch(e){if(epoch===state.epoch){caption.lastChild.textContent='索引读取失败';results.replaceChildren(empty(e.message,[link('打开索引站','https://share.ruc.edu.kg/','button-link'),button('重试',()=>void render(),'text-button')]));}return;}
  }else{
-  const cached=await catalog.call('search',{q,platform:'modern',term,teacher,college,offset:(page-1)*40,limit:40});
+  const query={q,platform,term,teacher,college,offset:(page-1)*40,limit:40};
+  const cached=await catalog.call('search',query);
   rows=cached.rows;total=cached.total;
   if(!total||q||teacher){
    if(rows.length&&epoch===state.epoch){results.replaceChildren(courseList(rows));caption.lastChild.textContent=`${total.toLocaleString()} 门`;}
@@ -103,36 +114,55 @@ async function coursesPage(epoch,params){
  }
  if(epoch!==state.epoch)return;
  caption.lastChild.textContent=[`${total.toLocaleString()} 门`,partial].filter(Boolean).join('　');
- results.replaceChildren(rows.length?courseList(rows):empty(q?'没有匹配课程':scope==='favorites'?'还没有收藏':scope==='recent'?'还没有观看记录':platform==='legacy'?'导入课程目录':'暂无课程',[scope==='all'&&state.stats.legacy===0?link('导入目录','#/settings','text-button'):link('全校找课','#/courses?scope=all','text-button')]));
+ results.replaceChildren(rows.length?courseList(rows):empty(q?'没有匹配课程':scope==='favorites'?'还没有收藏':scope==='recent'?'还没有观看记录':indexMode?'请输入课程名或教师；索引尚未完整':platform==='legacy'?'暂无旧版课程':'暂无课程',[indexMode?link('打开索引站','https://share.ruc.edu.kg/','text-button'):link('全校找课','#/courses?scope=all','text-button')]));
  if(total>40)pageNode.append(button('上一页',()=>go(courseHash({...values,page:page-1})),'',page===1?{disabled:''}:{}),node('span',{},`${page} / ${Math.max(1,Math.ceil(total/40))}`),button('下一页',()=>go(courseHash({...values,page:page+1})),'',page*40>=total?{disabled:''}:{}));
 }
 
 async function detailCourse(platform,id){
  const key=courseKey(platform,id);if(state.details.has(key))return state.details.get(key);
  const cached=await catalog.call('get',{key});
- const actual=await sources.detail(platform,id,{force:state.refresh});const course=normalizeCourse({...cached,...actual,code:actual.code||cached?.code,college:actual.college||cached?.college,lmsId:actual.lmsId||cached?.lmsId});
+ const actual=await sources.detail(platform,id,{force:state.refresh,indexed:cached?.indexSource==='autoslides'});const course=normalizeCourse({...cached,...actual,code:actual.code||cached?.code,college:actual.college||cached?.college,lmsId:actual.lmsId||cached?.lmsId});
  const full={...course,replays:actual.replays,lives:actual.lives};state.details.set(key,full);await catalog.call('upsert',{rows:[course]});return full;
 }
-async function coursePage(epoch,platform,id,params){
+async function sessionPage(epoch,platform,id,params){
+ if(platform!=='legacy'||!/^\d{1,12}$/.test(id)){setPage(epoch,empty('课次地址无效'));return;}
+ try{
+  const ref=await sources.resolve('https://www.yanhekt.cn/session/'+id);
+  if(epoch!==state.epoch)return;
+  if(!ref.legacy||ref.sessionId!==id)throw new Error('旧站返回的课次身份不一致');
+  await coursePage(epoch,'legacy',ref.id,params,id);
+ }catch(e){diagnostic('旧版课次',e);setPage(epoch,empty(explain(e),loginActions('legacy')));}
+}
+async function coursePage(epoch,platform,id,params,targetSession){
  if(!['legacy','modern'].includes(platform)||!/^\d{1,12}$/.test(id)){setPage(epoch,empty('课程地址无效'));return;}
- const tab=params.get('tab')||'watch',key=courseKey(platform,id);let course=await catalog.call('get',{key})||normalizeCourse({platform,id,title:'课程 '+id});
- const title=node('div',{}),area=node('div',{}),toolbar=node('div',{class:'inline-tools'},favoriteButton(course),link('原站',course.url,'button-link'));
- const head=()=>{title.replaceChildren(link('‹ 课程',state.lastSearch,'course-route-back'),node('h1',{},course.title),node('div',{class:'course-meta'},node('span',{},course.teacher),node('span',{},course.term),node('span',{class:'source-label'},platform==='legacy'?'旧版':'新版')));};head();
- setPage(epoch,node('div',{class:'page-heading course-heading'},title,toolbar),tabs([['watch','观看',routeTo(course)],['history','同师往年',routeTo(course,'history')],['peers','同课老师',routeTo(course,'peers')],['materials','资料与任务',routeTo(course,'materials')]],tab),area);
+ const tab=params.get('tab')||'watch',key=courseKey(platform,id);let sessionId=platform==='legacy'&&/^\d{1,12}$/.test(targetSession||params.get('sub')||'')?targetSession||params.get('sub'):null;
+ const withTarget=value=>sessionId?{...value,sessionId}:value;
+ let course=withTarget(await catalog.call('get',{key})||normalizeCourse({platform,id,title:'课程 '+id}));
+ if(platform==='legacy'&&params.get('index_source')==='autoslides')course={...course,indexSource:'autoslides'};
+ const title=node('div',{}),area=node('div',{}),originalLink=link('原站',sessionId?'https://www.yanhekt.cn/session/'+sessionId:course.url,'button-link'),toolbar=node('div',{class:'inline-tools'},favoriteButton(course),originalLink);
+ const head=()=>{title.replaceChildren(link('‹ 课程',state.lastSearch,'course-route-back'),node('h1',{},course.title),node('div',{class:'course-meta'},node('span',{},course.teacher),node('span',{},course.term),node('span',{class:'source-label'},platform==='legacy'?'旧版':'新版'),sessionId?node('span',{},'课次 '+sessionId):null));};head();
+ const makeTabs=()=>tabs([['watch','观看',routeTo(course)],['history','同师往年',routeTo(course,'history')],['peers','同课老师',routeTo(course,'peers')],['materials','资料与任务',routeTo(course,'materials')]],tab),navigation=node('div',{},makeTabs());
+ setPage(epoch,node('div',{class:'page-heading course-heading'},title,toolbar),navigation,area);
  if(tab==='watch'){
-  const src=new URL(chrome.runtime.getURL('watch/player.html'));src.searchParams.set(platform==='legacy'?'legacy':'course',id);src.searchParams.set('embedded','1');
+  const src=new URL(chrome.runtime.getURL('watch/player.html'));src.searchParams.set(platform==='legacy'?'legacy':'course',id);src.searchParams.set('embedded','1');if(course.indexSource==='autoslides')src.searchParams.set('index_source','autoslides');
   if(state.refresh)src.searchParams.set('refresh','1');
   const legacyLive=params.get('live');if(platform==='legacy'&&/^\d{1,12}$/.test(legacyLive||'')){src.searchParams.delete('legacy');src.searchParams.set('legacy_live',legacyLive);}
-  const sub=params.get('sub');if(!legacyLive&&sub&&/^\d{1,12}$/.test(sub)){if(platform==='legacy'){src.searchParams.delete('legacy');src.searchParams.set('legacy_session',sub);}else src.searchParams.set('sub_id',sub);}
-  const frame=node('iframe',{src:src.href,class:'watch-frame',title:'课程播放器',allow:'fullscreen','allowfullscreen':''});
+  const sub=sessionId||params.get('sub');if(!legacyLive&&sub&&/^\d{1,12}$/.test(sub)){if(platform==='legacy'){src.searchParams.delete('legacy');src.searchParams.set('legacy_session',sub);}else src.searchParams.set('sub_id',sub);}
+  const frame=node('iframe',{src:src.href,class:'watch-frame',title:'课程播放器',allow:'autoplay; fullscreen; clipboard-write','allowfullscreen':''});
   const controller=new AbortController();cleanups.push(()=>controller.abort());
   window.addEventListener('message',event=>{
    if(event.source!==frame.contentWindow||event.origin!==new URL(chrome.runtime.getURL('')).origin)return;
-   if(event.data?.type==='REFINE_PLAYER_SIZE'&&Number.isFinite(event.data.height)&&event.data.height>=200&&event.data.height<=12000)frame.style.height=event.data.height+'px';
-   if(event.data?.type==='REFINE_COURSE'&&String(event.data.course?.id)===id){const incoming=normalizeCourse({...course,...event.data.course,platform});if(incoming&&epoch===state.epoch){course=incoming;head();void catalog.call('upsert',{rows:[course]}).catch(()=>{});}}
+   if(event.data?.type==='REFINE_VIEW_MODE'&&['browser','normal'].includes(event.data.mode)){frame.classList.toggle('viewer-window-frame',event.data.mode==='browser');}
+   if(event.data?.type==='REFINE_PLAYER_SIZE'&&!frame.classList.contains('viewer-window-frame')&&Number.isFinite(event.data.height)&&event.data.height>=200&&event.data.height<=12000)frame.style.height=event.data.height+'px';
+   if(event.data?.type==='REFINE_COURSE'&&String(event.data.course?.id)===id){const incoming=normalizeCourse({...course,...event.data.course,platform});if(incoming&&epoch===state.epoch){course=withTarget(incoming);head();void catalog.call('upsert',{rows:[incoming]}).catch(()=>{});}}
+   if(event.data?.type==='REFINE_SESSION'&&epoch===state.epoch&&platform==='legacy'&&String(event.data.courseId)===id&&/^\d{1,12}$/.test(event.data.sessionId||'')&&event.data.sessionId!==sessionId){
+    sessionId=event.data.sessionId;course=withTarget(course);head();navigation.replaceChildren(makeTabs());
+    const target='https://www.yanhekt.cn/session/'+sessionId;originalLink.href=site?nativeHref(target,{remember:true}):target;
+    if(replaceRoute)replaceRoute(routeTo(course));else history.replaceState(null,'',routeTo(course));
+   }
   },{signal:controller.signal});area.append(frame);return;
  }else area.append(loading());
- try{course=await detailCourse(platform,id);if(epoch!==state.epoch)return;head();}catch(e){diagnostic('课程详情',e);if(tab!=='watch'&&epoch===state.epoch&&!course.teacher){area.replaceChildren(empty('连接课堂',loginActions(platform)));return;}}
+ try{course=withTarget(await detailCourse(platform,id));if(epoch!==state.epoch)return;head();}catch(e){diagnostic('课程详情',e);if(tab!=='watch'&&epoch===state.epoch&&!course.teacher){area.replaceChildren(empty('连接课堂',loginActions(platform)));return;}}
  if(epoch!==state.epoch)return;
  if(tab==='history'||tab==='peers'){
   const teacher=params.get('teacher')||course.teachers[0]||'';let related=await catalog.call('related',{course:{...course,teachers:teacher?[teacher]:course.teachers},kind:tab==='history'?'teacher':'title',platform:'modern',limit:100});
@@ -186,7 +216,7 @@ async function learningPage(epoch,kind,params){
  if(epoch!==state.epoch)return;
  const source=['lms','lexue','modern'].includes(params.get('source'))?params.get('source'):'all';
  const options=[...courses.map(c=>({...c,filterKey:teachingKey(c)})),...classroom.map(c=>({...c,filterKey:c.key,source:'modern'}))].filter(c=>source==='all'||c.source===source);
- const terms=[...new Set(options.map(c=>c.term).filter(Boolean))].sort().reverse(),term=params.get('term')??terms[0]??'',courseId=params.get('course')||'',status=params.get('state')||'pending';
+ const terms=courseTermOptions(options),requestedTerm=termLabel(params.get('term')),term=params.has('term')?(terms.includes(requestedTerm)?requestedTerm:''):(terms[0]||''),courseId=params.get('course')||'',status=params.get('state')||'pending';
  const selected=courses.filter(c=>(source==='all'||c.source===source)&&(!term||c.term===term)&&(!courseId||teachingKey(c)===courseId));
  const selectedClassroom=classroom.filter(c=>(source==='all'||source==='modern')&&(!term||c.term===term)&&(!courseId||c.key===courseId));
  const change=(name,value)=>go('#/'+kind+'?'+new URLSearchParams({term,course:courseId,state:status,source,[name]:value}));
@@ -202,8 +232,8 @@ async function learningPage(epoch,kind,params){
 
 async function exportRecords(){const blob=new Blob([JSON.stringify(safeRecords(await chrome.storage.local.get(null)),null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=link('','');a.href=url;a.download='延河学习记录.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 async function settingsPage(epoch){
- const input=node('input',{id:'catalog-file',type:'file',accept:'.xlsx,.json',hidden:'',onchange:async event=>{const file=event.target.files[0];if(!file)return;const status=$('import-state');status.textContent='正在导入…';try{state.stats=await catalog.call('import',{name:file.name,buffer:await file.arrayBuffer()},count=>status.textContent=`已读取 ${count.toLocaleString()} 门`);status.textContent=`${state.stats.count.toLocaleString()} 门`;toast('课程目录已更新');}catch(e){status.textContent='导入失败';toast(diagnostic('课程导入',e));}event.target.value='';}});
- const records=node('input',{id:'records-file',type:'file',accept:'.json',hidden:'',onchange:async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>10*1024*1024)throw new Error('记录文件超过 10 MB');const value=safeRecords(JSON.parse(await file.text()));await chrome.storage.local.set(value);state.favorites=new Set(value['desk:favorites']||[...state.favorites]);state.mappings=value['desk:mappings']||state.mappings;state.bindings=value['desk:bindings']||state.bindings;toast('学习记录已导入');}catch(e){toast(diagnostic('记录导入',e));}event.target.value='';}});
+ const input=node('input',{id:'catalog-file',type:'file',accept:'.xlsx,.json',hidden:'',onchange:async event=>{const input=event.target,file=input.files[0];if(!file)return;const status=$('import-state');status.textContent='正在导入…';try{state.stats=await catalog.call('import',{name:file.name,buffer:await file.arrayBuffer()},count=>status.textContent=`已读取 ${count.toLocaleString()} 门`);status.textContent=state.stats.importedSessions?`已导入 ${state.stats.imported.toLocaleString()} 门旧版课程 / ${state.stats.importedSessions.toLocaleString()} 个课次`:`${state.stats.count.toLocaleString()} 门`;toast('课程目录已更新');}catch(e){status.textContent='导入失败';toast(diagnostic('课程导入',e));}input.value='';}});
+ const records=node('input',{id:'records-file',type:'file',accept:'.json',hidden:'',onchange:async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>10*1024*1024)throw new Error('记录文件超过 10 MB');const value=safeRecords(JSON.parse(await file.text()));await chrome.storage.local.set(value);state.favorites=new Set(value['desk:favorites']||[...state.favorites]);state.mappings=value['desk:mappings']||state.mappings;state.bindings=value['desk:bindings']||state.bindings;toast('学习记录已导入');}catch(e){toast(diagnostic('记录导入',e));}input.value='';}});
  const setting=(title,sub,tools)=>node('div',{class:'setting-row'},node('div',{},node('h3',{},title),node('p',{},sub)),node('div',{class:'inline-tools'},tools));
  const section=node('div',{class:'settings'},setting('课程目录',`旧版 ${state.stats.legacy.toLocaleString()}　新版 ${state.stats.modern.toLocaleString()}`,[node('span',{id:'import-state',class:'muted'},`${state.stats.count.toLocaleString()} 门`),button('导入课程表',()=>input.click()),input]),
   setting('学习记录','播放进度、字幕校准与收藏',[button('导出',()=>void exportRecords()),button('导入',()=>records.click()),records]),
@@ -222,11 +252,12 @@ function morePage(epoch){
  setPage(epoch,heading('更多',''),node('div',{class:'more-groups'},groups.map(([title,entries])=>node('section',{},node('h2',{},title),node('div',{class:'more-links'},entries.map(([label,url])=>link(label,url)))))));
 }
 
-async function openReference(params){let value;if(params.has('legacy_live'))value='https://www.yanhekt.cn/live/'+params.get('legacy_live');else if(params.has('legacy_session'))value='https://www.yanhekt.cn/session/'+params.get('legacy_session');else value=params.get('url');const ref=await sources.resolve(value);go(`#/course/${ref.legacy?'legacy':'modern'}/${ref.id}?tab=watch`+(ref.liveId?'&live='+ref.liveId:ref.sessionId||ref.subId?'&sub='+encodeURIComponent(ref.sessionId||ref.subId):''),true);}
-async function render(){cleanups.splice(0).forEach(fn=>fn());const epoch=++state.epoch,{parts,params}=route(),page=parts[0]||'today';coursework.setContext((page==='course'?parts.slice(0,3).join('/')+':'+(params.get('tab')||'watch'):page+':'+(params.get('course')||''))+':'+(params.get('source')||''));main.dataset.page=page;root.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===(page==='course'||page==='open'?'courses':page)));main.replaceChildren(loading());try{
- if(page==='today')await todayPage(epoch);else if(page==='courses')await coursesPage(epoch,params);else if(page==='course')await coursePage(epoch,parts[1],parts[2],params);else if(page==='tasks'||page==='materials')await learningPage(epoch,page,params);else if(page==='settings')await settingsPage(epoch);else if(page==='more')morePage(epoch);else if(page==='open')await openReference(params);else go('#/today');
+async function resolveReference(value){const parsed=parseCourse(value);return parsed.legacy&&parsed.sessionId?parsed:sources.resolve(value);}
+async function openReference(params){let value;if(params.has('legacy_live'))value='https://www.yanhekt.cn/live/'+params.get('legacy_live');else if(params.has('legacy_session'))value='https://www.yanhekt.cn/session/'+params.get('legacy_session');else value=params.get('url');go(referenceRoute(await resolveReference(value)),true);}
+async function render(){cleanups.splice(0).forEach(fn=>fn());const epoch=++state.epoch,{parts,params}=route(),page=parts[0]||'today';coursework.setContext((['course','session'].includes(page)?parts.slice(0,3).join('/')+':'+(params.get('tab')||'watch'):page+':'+(params.get('course')||''))+':'+(params.get('source')||''));main.dataset.page=page;root.querySelectorAll('[data-nav]').forEach(a=>a.classList.toggle('active',a.dataset.nav===(['course','session','open'].includes(page)?'courses':page)));main.replaceChildren(loading());try{
+ if(page==='today')await todayPage(epoch);else if(page==='courses')await coursesPage(epoch,params);else if(page==='course')await coursePage(epoch,parts[1],parts[2],params);else if(page==='session')await sessionPage(epoch,parts[1],parts[2],params);else if(page==='tasks'||page==='materials')await learningPage(epoch,page,params);else if(page==='settings')await settingsPage(epoch);else if(page==='more')morePage(epoch);else if(page==='open')await openReference(params);else go('#/today');
  }catch(e){diagnostic('界面',e);setPage(epoch,empty(explain(e),[link('返回课程','#/courses','button-link')]));}finally{if(epoch===state.epoch)state.refresh=false;}}
-$('global-search').addEventListener('submit',async event=>{event.preventDefault();const value=$('global-query').value.trim();if(/^https:\/\//i.test(value)||/^\[[^\]]+\]\(https:/.test(value)){try{const ref=await sources.resolve(value);go(`#/course/${ref.legacy?'legacy':'modern'}/${ref.id}?tab=watch`+(ref.liveId?'&live='+ref.liveId:ref.sessionId||ref.subId?'&sub='+encodeURIComponent(ref.sessionId||ref.subId):''));}catch(e){toast(diagnostic('链接',e));}}else go(courseHash({scope:'all',q:value}));});
+$('global-search').addEventListener('submit',async event=>{event.preventDefault();const value=$('global-query').value.trim();if(/^https:\/\//i.test(value)||/^\[[^\]]+\]\(https:/.test(value)){try{go(referenceRoute(await resolveReference(value)));}catch(e){toast(diagnostic('链接',e));}}else{const filters=new URLSearchParams(currentRoute().split('?')[1]||'');go(courseHash({scope:'all',q:value,...(filters.get('scope')==='all'&&filters.get('platform')==='legacy'?{platform:'legacy',term:filters.get('term')||''}:{})}));}});
 $('refresh').addEventListener('click',()=>{state.refresh=true;state.my=null;state.oldMy=null;state.lms=null;state.details.clear();void render();});
 root.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'){event.preventDefault();$('global-query').focus();$('global-query').select();}});
 if(!site)window.addEventListener('hashchange',()=>void render());
@@ -238,14 +269,15 @@ function recoverTeaching(){
  teachingRecovery=(async()=>{
   await Promise.all(failed.map(source=>ensureLms(true,source).catch(e=>diagnostic('乐学连接',e))));
   if(epoch!==state.epoch||!failed.some(source=>state.lmsStatus?.[source==='lexue'?1:0]===true)||$('resources-dialog').open)return;
-  const {parts,params}=route();if(['materials','tasks','courses','today'].includes(parts[0])||(parts[0]==='course'&&params.get('tab')==='materials'))void render();
+  const {parts,params}=route();if(['materials','tasks','courses','today'].includes(parts[0])||(['course','session'].includes(parts[0])&&params.get('tab')==='materials'))void render();
  })().finally(()=>teachingRecovery=null);
 }
 window.addEventListener('focus',recoverTeaching);document.addEventListener('visibilitychange',recoverTeaching);
 window.addEventListener('pagehide',()=>{catalog.worker.terminate();sources.reset();});
 async function start(){try{
  const statsPromise=catalog.call('init').then(stats=>{state.stats=stats;}).catch(e=>diagnostic('目录',e));
- const prefs=await chrome.storage.local.get(['desk:favorites','desk:mappings','desk:bindings']);
+ const prefs=await chrome.storage.local.get(['desk:favorites','desk:mappings','desk:bindings','desk:sidebarCollapsed']);
+ if(!sidebarChanged)sidebarCollapsed(prefs['desk:sidebarCollapsed']===true);
  if((route().parts[0]||'today')!=='today')await statsPromise;
  state.favorites=new Set(prefs['desk:favorites']||[]);state.mappings=prefs['desk:mappings']||{};state.bindings=safeBindings(prefs['desk:bindings']);state.version=chrome.runtime.getManifest().version;
  await render();

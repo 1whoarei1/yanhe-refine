@@ -7,6 +7,7 @@ export class RemoteCatalog{
  worker={terminate(){}};
 }
 export class RemoteSources{
+ index=Object.fromEntries(['terms','search'].map(method=>[method,(...args)=>request('legacyIndex',{method,args})]));
  legacy={enrolled:()=>request('legacy',{method:'enrolled'})};
  modern=Object.fromEntries(['enrolled','search','today','otherTeacherCourses','materials'].map(method=>[method,(...args)=>request('modern',{method,args})]));
  resolve=(...args)=>request('resolve',{args});

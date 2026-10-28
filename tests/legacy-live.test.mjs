@@ -10,9 +10,9 @@ test('legacy live uses the official target channels and does not sign live CDN U
  assert.throws(()=>legacyLiveSignedUrl('https://untrusted.example/live.m3u8',null,()=>''));
  assert.deepEqual(legacyLive({...base,target:'https://evil.example/live.m3u8',target_vga:null},now).streams,{});
 });
-test('scheduled and ended legacy sessions never falsely become playable live sessions',()=>{
+test('timetable inference applies to scheduled entries while explicit live and ended statuses win',()=>{
  assert.equal(legacyLive({...base,status:2},now-3600000).mode,'upcoming');assert.deepEqual(legacyLive({...base,status:2},now-3600000).streams,{});
- assert.equal(legacyLive({...base,status:2},now).mode,'live');assert.equal(legacyLive({...base,status:3},now).mode,'ended');assert.equal(legacyLive(base,now+3600000).mode,'ended');
+ assert.equal(legacyLive({...base,status:2},now).mode,'live');assert.equal(legacyLive({...base,status:3},now).mode,'ended');assert.equal(legacyLive(base,now+3600000).mode,'live');assert.equal(legacyLive({...base,status:2},now+3600000).mode,'ended');
 });
 test('live references retain the live identity separately from course and recording session IDs',async()=>{
  const api=new LegacyYanheApi();api.authenticate=async()=>{};api.json=async()=>({data:{...base,course:{id:71988,name_zh:'课程'},session_id:920536,session:{id:920536,course_id:71988}}});

@@ -3,6 +3,7 @@ import styles from './desk.css';
 import icons from './ui-icons.svg';
 import {startDesk} from './desk.js';
 import {siteRoute,siteHref,nativeHref} from './site-routes.js';
+import {modeIntent,readSiteMode} from './site-mode.js';
 
 export function mountSite(){
  document.open();document.write('<!doctype html><html lang="zh-CN"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body></body></html>');document.close();
@@ -16,14 +17,14 @@ export function mountSite(){
  shadow.querySelectorAll('a[href^="#/"]').forEach(a=>a.href=siteHref(a.getAttribute('href')));
  shadow.querySelector('.brand span').textContent='延河课堂';
  const account=shadow.querySelector('#account-link');account.href=nativeHref('https://aita.yanhekt.cn/portal/#/');account.removeAttribute('target');
- const original=shadow.querySelector('.original-link');original.textContent='恢复原版';original.href=nativeHref(location.href);original.removeAttribute('target');
+ const original=shadow.querySelector('.original-link');original.textContent='恢复原版';original.href=nativeHref(location.href,{remember:true});original.removeAttribute('target');
  let app;
- const navigate=(route,replace=false)=>{const target=new URL(siteHref(route));if(target.origin!==location.origin){location.assign(target.href);return;}history[replace?'replaceState':'pushState']({},'',target.href);original.href=nativeHref(location.href);void app.render();};
- shadow.addEventListener('click',e=>{if(e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;const a=e.composedPath().find(n=>n?.tagName==='A');if(!a||a.target==='_blank'||a.download)return;const url=new URL(a.href,location.href),route=siteRoute(url.href);if(!route)return;e.preventDefault();if(url.origin!==location.origin){location.assign(url.href);return;}history.pushState({},'',url.href);original.href=nativeHref(location.href);void app.render();});
- app=startDesk({root:shadow,currentRoute:()=>siteRoute(location.href)||'/today',navigate,hrefForRoute:siteHref,site:true});
- const restoreLocation=()=>{original.href=nativeHref(location.href);if(siteRoute(location.href))void app.render();else location.reload();};
+ const navigate=(route,replace=false)=>{const target=new URL(siteHref(route));if(target.origin!==location.origin){location.assign(target.href);return;}history[replace?'replaceState':'pushState']({},'',target.href);original.href=nativeHref(location.href,{remember:true});void app.render();};
+ shadow.addEventListener('click',async e=>{if(e.defaultPrevented||e.button!==0||e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;const a=e.composedPath().find(n=>n?.tagName==='A');if(!a||a.target==='_blank'||a.download)return;const url=new URL(a.href,location.href),route=siteRoute(url.href);if(modeIntent(url.href)){e.preventDefault();await readSiteMode(url.href);location.assign(url.href);return;}if(!route)return;e.preventDefault();if(url.origin!==location.origin){location.assign(url.href);return;}history.pushState({},'',url.href);original.href=nativeHref(location.href,{remember:true});void app.render();});
+ const replaceRoute=route=>{const target=new URL(siteHref(route));if(target.origin!==location.origin)return;history.replaceState({},'',target.href);original.href=nativeHref(location.href,{remember:true});};
+ app=startDesk({root:shadow,currentRoute:()=>siteRoute(location.href)||'/today',navigate,replaceRoute,hrefForRoute:siteHref,site:true});
+ const restoreLocation=()=>{original.href=nativeHref(location.href,{remember:true});if(siteRoute(location.href))void app.render();else location.reload();};
  addEventListener('popstate',restoreLocation);
  addEventListener('hashchange',restoreLocation);
- chrome.runtime.onMessage.addListener(message=>{if(message.type==='REFINE_RESTORE')location.assign(nativeHref(location.href));});
  return app;
 }

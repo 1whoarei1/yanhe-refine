@@ -1,4 +1,17 @@
-import {text,isTrue,termLabel} from './catalog-core.js';
+import {text,isTrue,termLabel,metadataLabel} from './catalog-core.js';
+export function academicTerm(year,semester){
+ const yearName=metadataLabel(year).normalize('NFKC').replace(/[–—－/]/g,'-'),semesterName=metadataLabel(semester).normalize('NFKC');
+ const full=termLabel(semesterName);if(/^\d{4}-\d{4}-(?:[123]|小学期|暑期)$/.test(full))return full;
+ const years=yearName.match(/(\d{4})\s*-\s*(\d{4})/)||[null,metadataLabel(year?.start_year),metadataLabel(year?.end_year)];
+ if(!/^\d{4}$/.test(years[1]||'')||Number(years[2])!==Number(years[1])+1)return '';
+ const label=semesterName.trim().replace(/^[-\s]+/,'');
+ let part='';if(/^(?:1|一|上)$|第一学期|第1学期|上学期|秋/.test(label))part='1';
+ else if(/^(?:2|二|下)$|第二学期|第2学期|下学期|春/.test(label))part='2';
+ else if(/^(?:3|三)$|第三学期|第3学期/.test(label))part='3';
+ else if(/小学期|暑期|夏季学期/.test(label))part='暑期';
+ if(!part){const suffix=termLabel(yearName).match(/^\d{4}-\d{4}-([123])$/);if(!label&&suffix)part=suffix[1];}
+ return part?`${years[1]}-${years[2]}-${part}`:'';
+}
 export function schoolEpoch(value) {
  if(typeof value==='number'||/^\d{10,13}$/.test(text(value))){const n=Number(value);return Number.isFinite(n)?(n<1e12?n*1000:n):null;}
  const raw=text(value);if(!raw)return null;
@@ -11,8 +24,8 @@ export function published(row) {
 }
 export function lmsCourses(body) {
  const rows=body.courses||body.data?.courses||[];
- return rows.filter(r=>/^\d{1,12}$/.test(text(r.id))).map(r=>({id:text(r.id),title:text(r.name),code:text(r.course_code),
-  term:termLabel([text(r.academic_year),text(r.semester)].filter(Boolean).join('-')),department:typeof r.department==='string'?r.department:text(r.department?.name),url:`https://zy-eclass.bit.edu.cn/course/${r.id}/content#/`}));
+ return rows.filter(r=>/^\d{1,12}$/.test(text(r.id))).map(r=>({id:text(r.id),title:metadataLabel(r.name),code:metadataLabel(r.course_code),
+  term:academicTerm(r.academic_year,r.semester),department:metadataLabel(r.department),url:`https://zy-eclass.bit.edu.cn/course/${r.id}/content#/`}));
 }
 export function activityUrl(courseId,id) {return `https://zy-eclass.bit.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`;}
 export function homeworkRows(body,statusBody={},courseId) {

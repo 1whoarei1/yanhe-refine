@@ -69,7 +69,8 @@ export function parseLegacyCaptions(text) {
 export function legacyLive(data,now=Date.now()) {
  const epoch=value=>{const text=String(value||'').replace(' ','T');return Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(text)?text:text+'+08:00')||0;};
  const start=epoch(data.schedule_started_at),end=epoch(data.schedule_ended_at),status=Number(data.status);
- const mode=status===3||(end&&now>end+120000)?'ended':status===1||(status===2&&start&&now>=start&&(!end||now<end))?'live':status===2?'upcoming':'ended';
+ // An explicit live status also covers a class running past its timetable.
+ const mode=status===3?'ended':status===1?'live':(end&&now>end+120000)?'ended':status===2&&start&&now>=start&&(!end||now<end)?'live':status===2?'upcoming':'ended';
  const streams={},candidates={};
  if(mode==='live')for(const [field,view] of [['target','classroom'],['target_vga','screen'],['target_room','student']]){
   if(!data[field])continue;try{const url=mediaUrl(data[field]),format=/\.m3u8$/i.test(url.pathname)?'hls':/\.flv$/i.test(url.pathname)?'flv':null;

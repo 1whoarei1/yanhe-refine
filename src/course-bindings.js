@@ -1,3 +1,4 @@
+import {termLabel} from './catalog-core.js';
 const keyPattern=/^(legacy|modern):\d{1,8}:\d{1,12}$/;
 const numeric=value=>/^\d{1,12}$/.test(String(value));
 const sources=['lms','lexue'];
@@ -9,8 +10,8 @@ export function sameTeachingCourse(course,target){
  const a=subjects(course.title),b=subjects(target.title);return a.some(title=>b.includes(title));
 }
 export function safeBindings(value){const result={};if(!value||typeof value!=='object'||Array.isArray(value))return result;
- for(const [key,row]of Object.entries(value)){if(!keyPattern.test(key)||!row||typeof row!=='object'||typeof row.title!=='string'||row.title.length>512)continue;const item={title:row.title,term:String(row.term||'').slice(0,64),active:sources.includes(row.active)?row.active:'lms'};
-  for(const source of sources){const target=row[source];if(target===null)item[source]=null;else if(target&&numeric(target.id)&&typeof target.title==='string'&&target.title.length<=512)item[source]={id:String(target.id),title:target.title,term:String(target.term||'').slice(0,64)};}
+ for(const [key,row]of Object.entries(value)){if(!keyPattern.test(key)||!row||typeof row!=='object'||typeof row.title!=='string'||row.title.length>512)continue;const item={title:row.title,term:termLabel(row.term).slice(0,64),active:sources.includes(row.active)?row.active:'lms'};
+  for(const source of sources){const target=row[source];if(target===null)item[source]=null;else if(target&&numeric(target.id)&&typeof target.title==='string'&&target.title.length<=512)item[source]={id:String(target.id),title:target.title,term:termLabel(target.term).slice(0,64)};}
   result[key]=item;
  }return result;
 }
