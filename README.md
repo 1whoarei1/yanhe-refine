@@ -2,16 +2,18 @@
 
 直接在延河课堂原站整合课程、直播、回放、资料和待办，支持新版与旧版课堂。
 
-**当前版本：0.10.0** · Edge / Chrome Manifest V3
+**当前版本：0.10.1** · Edge / Chrome Manifest V3
 
 [下载正式版](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [独立回放助手](https://github.com/1whoarei1/yanhe-replay) · [接口参考](https://github.com/1whoarei1/yanhe-api-reference) · [更新记录](CHANGELOG.md)
 
 ## 安装或更新
 
-1. 下载 Release 中的 `yanhe-refine-0.10.0.zip` 并解压到固定文件夹。
+1. 下载 Release 中的 `yanhe-refine-0.10.1.zip` 并解压到固定文件夹。
 2. 在 `edge://extensions` 或 `chrome://extensions` 开启开发者模式，选择「加载解压缩的扩展」，选中含 `manifest.json` 的文件夹。
 3. 打开 [新版课堂](https://aita.yanhekt.cn/) 或 [旧版课堂](https://www.yanhekt.cn/)，沿用原站登录状态。
 4. 更新已有安装时备份原目录、替换扩展文件，在扩展管理页重新加载，再刷新课堂页面。
+
+0.10.1 修复旧乐学当前作业因旧学期 / 未填学期被漏掉的问题。待办默认查询所有学期的未过期未交任务，首页近期作业保持一致；单项详情失败会保留「待同步」并提示部分同步失败。
 
 ## 两份可导入目录
 

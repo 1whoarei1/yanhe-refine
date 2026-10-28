@@ -1,6 +1,6 @@
 {
   "name": "yanhe-refine",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "type": "module",
   "description": "延河焕新：直接在延河课堂原站整合导航、课程、直录播、资料与待办。",
@@ -19,7 +19,8 @@
     "test:browser:live-features": "node tools/live-features-browser-test.mjs",
     "test:browser:streams": "node tools/three-stream-browser-test.mjs",
     "test:browser:imports": "node tools/catalog-import-browser-test.mjs",
-    "test:browser:metadata": "node tools/metadata-browser-test.mjs"
+    "test:browser:metadata": "node tools/metadata-browser-test.mjs",
+    "test:browser:tasks": "node tools/tasks-browser-test.mjs"
   },
   "dependencies": {
     "blueimp-md5": "2.19.0",
