@@ -1,15 +1,26 @@
 import {text,isTrue,termLabel,metadataLabel} from './catalog-core.js';
+function fullAcademicTerm(label){
+ const name=label.normalize('NFKC').replace(/[–—－/]/g,'-').replace(/\s+/g,'');
+ const seasonal=name.match(/^(\d{4})-(\d{4})(?:学年)?-?(?:第)?([123一二三])季学期$/);
+ const full=seasonal?`${seasonal[1]}-${seasonal[2]}-${({'一':'1','二':'2','三':'3'})[seasonal[3]]||seasonal[3]}`:termLabel(name);
+ const match=full.match(/^(\d{4})-(\d{4})-(?:[123]|小学期|暑期)$/);
+ return match&&Number(match[2])===Number(match[1])+1?full:'';
+}
 export function academicTerm(year,semester){
- const yearName=metadataLabel(year).normalize('NFKC').replace(/[–—－/]/g,'-'),semesterName=metadataLabel(semester).normalize('NFKC');
- const full=termLabel(semesterName);if(/^\d{4}-\d{4}-(?:[123]|小学期|暑期)$/.test(full))return full;
- const years=yearName.match(/(\d{4})\s*-\s*(\d{4})/)||[null,metadataLabel(year?.start_year),metadataLabel(year?.end_year)];
+ const candidates=[semester?.real_name,semester?.realName,semester,semester?.semester_index].map(value=>metadataLabel(value)).filter(Boolean);
+ for(const label of candidates){const full=fullAcademicTerm(label);if(full)return full;}
+ const yearName=metadataLabel(year).normalize('NFKC').replace(/[–—－/]/g,'-');
+ const single=year&&typeof year==='object'?yearName.match(/^(20\d{2})(?:学年|年度|年)?$/):null;
+ const years=yearName.match(/(\d{4})\s*-\s*(\d{4})/)||(single?[null,single[1],String(Number(single[1])+1)]:[null,metadataLabel(year?.start_year),metadataLabel(year?.end_year)]);
  if(!/^\d{4}$/.test(years[1]||'')||Number(years[2])!==Number(years[1])+1)return '';
- const label=semesterName.trim().replace(/^[-\s]+/,'');
- let part='';if(/^(?:1|一|上)$|第一学期|第1学期|上学期|秋/.test(label))part='1';
- else if(/^(?:2|二|下)$|第二学期|第2学期|下学期|春/.test(label))part='2';
- else if(/^(?:3|三)$|第三学期|第3学期/.test(label))part='3';
- else if(/小学期|暑期|夏季学期/.test(label))part='暑期';
- if(!part){const suffix=termLabel(yearName).match(/^\d{4}-\d{4}-([123])$/);if(!label&&suffix)part=suffix[1];}
+ let part='';for(const raw of candidates){const label=raw.normalize('NFKC').trim().replace(/^[-\s]+/,'');
+  if(/^(?:1|一|上)$|(?:^|[^\d])第?\s*[1一]\s*季?\s*学期|上学期|秋|\b(?:fall|autumn)\b/i.test(label))part='1';
+  else if(/^(?:2|二|下)$|(?:^|[^\d])第?\s*[2二]\s*季?\s*学期|下学期|春|\bspring\b/i.test(label))part='2';
+  else if(/^(?:3|三)$|(?:^|[^\d])第?\s*[3三]\s*季?\s*学期/.test(label))part='3';
+  else if(/小学期|暑期|夏季学期|\bsummer\b/i.test(label))part='暑期';
+  if(part)break;
+ }
+ if(!part&&!candidates.length){const suffix=termLabel(yearName).match(/^\d{4}-\d{4}-([123])$/);if(suffix)part=suffix[1];}
  return part?`${years[1]}-${years[2]}-${part}`:'';
 }
 export function schoolEpoch(value) {
@@ -22,10 +33,17 @@ export function published(row) {
  const no=value=>value===false||value===0||value==='0';
  return isTrue(row.published)&&![row.is_visible,row.visible,row.available].some(no)&&!isTrue(row.deleted);
 }
-export function lmsCourses(body) {
+export function lmsCourses(body,catalog={}) {
  const rows=body.courses||body.data?.courses||[];
- return rows.filter(r=>/^\d{1,12}$/.test(text(r.id))).map(r=>({id:text(r.id),title:metadataLabel(r.name),code:metadataLabel(r.course_code),
-  term:academicTerm(r.academic_year,r.semester),department:metadataLabel(r.department),url:`https://zy-eclass.bit.edu.cn/course/${r.id}/content#/`}));
+ const years=new Map((catalog.academicYears||[]).map(row=>[text(row.id),row])),semesters=new Map((catalog.semesters||[]).map(row=>[text(row.id),row]));
+ const resolve=(value,map)=>{const id=text(value&&typeof value==='object'?value.id:value),ref=value!=null&&typeof value!=='object'&&/^\d{1,12}$/.test(id)?{id}:value,found=map.get(id);return found?{...(ref&&typeof ref==='object'?ref:{}),...Object.fromEntries(Object.entries(found).filter(([,v])=>v!=null&&v!==''))}:ref;};
+ return rows.filter(r=>/^\d{1,12}$/.test(text(r.id))).map(r=>{
+  const semester=resolve(r.semester??r.semester_id,semesters);
+  const year=resolve(r.academic_year??r.academic_year_id??semester?.academic_year??semester?.academic_year_id,years);
+  const term=academicTerm(year,semester)||academicTerm(resolve(semester?.academic_year??semester?.academicYear??semester?.academic_year_id,years),semester);
+  return {id:text(r.id),title:metadataLabel(r.name),code:metadataLabel(r.course_code),term,
+   department:metadataLabel(r.department),url:`https://zy-eclass.bit.edu.cn/course/${r.id}/content#/`};
+ });
 }
 export function activityUrl(courseId,id) {return `https://zy-eclass.bit.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`;}
 export function homeworkRows(body,statusBody={},courseId) {

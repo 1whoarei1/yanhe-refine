@@ -20,6 +20,8 @@ try{
   if(path.endsWith('/get-course-resource'))return json({code:0,data:[]});
   if(url.hostname==='zy-eclass.bit.edu.cn'){
    if(path==='/api/my-courses')return json({courses:[{id:401,name:'数据课程',academic_year:{id:55,name:'2026-2027'},semester:{id:91,name:'第一学期'}},{id:402,name:'往年课程',academic_year:{name:'2025-2026'},semester:{name:'第二学期'}},{id:403,name:'资料不完整的课程',academic_year:{id:6},semester:{id:9}}]});
+   if(path==='/api/my-academic-years')return json({academic_years:[{id:55,name:'2026-2027'}]});
+   if(path==='/api/my-semesters-all')return json({semesters:[{id:91,name:'第一学期',academic_year_id:55}]});
    if(path.endsWith('courseware-activities'))return json([]);
    if(path.endsWith('homework-activities'))return json({homework_activities:[],page:1,pages:1});
    if(path.endsWith('submission-status'))return json({homework_activities:[]});

@@ -46,7 +46,7 @@ export function siteHref(route){
  else if(parts[0]==='courses'){u=new URL(`${modern}/personal/#/myStudy/myCourse`);if(p.get('scope')==='all')u=new URL(`${modern}/searchContent?tenant_code=21`);}
  else if(parts[0]==='tasks')u=new URL(`${modern}/personal/#/myStudy/myTask`);
  else {u=new URL(`${modern}/personal/`);u.searchParams.set('yh_view',['materials','settings','more'].includes(parts[0])?parts[0]:'today');}
- for(const [key,value]of p)if(value&&['scope','q','platform','term','teacher','college','page','tab','sub','live','course','state','source','index_source'].includes(key))u.searchParams.set('yh_'+key,value);
+ for(const [key,value]of p)if((value||key==='term')&&['scope','q','platform','term','teacher','college','page','tab','sub','live','course','state','source','index_source'].includes(key))u.searchParams.set('yh_'+key,value);
  return u.href;
 }
 export function referenceRoute(ref){

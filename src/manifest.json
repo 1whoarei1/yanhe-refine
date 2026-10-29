@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "延河焕新",
-  "version": "0.10.1",
+  "version": "0.10.5",
   "description": "直接重构延河课堂原站：整合导航、课程发现、直录播、平台字幕和学习资料。",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -77,5 +77,6 @@
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; worker-src 'self'; object-src 'none'; connect-src 'self' https://share.ruc.edu.kg https://zy-media.bit.edu.cn https://*.yanhekt.cn https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn; media-src 'self' blob: https://*.yanhekt.cn; img-src 'self' data: https://zy-eclass.bit.edu.cn https://lexue.bit.edu.cn https://aita.yanhekt.cn; style-src 'self'; frame-src 'self'; base-uri 'none'; frame-ancestors 'self' https://aita.yanhekt.cn https://www.yanhekt.cn;"
-  }
+  },
+  "version_name": "0.10.5（修复预发布）"
 }

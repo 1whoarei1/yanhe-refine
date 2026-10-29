@@ -2,13 +2,25 @@ import {lmsCourses,homeworkRows,materialRows,resourceRows,homeworkDetail,submiss
 export const LMS_ORIGIN='https://zy-eclass.bit.edu.cn';
 export function numeric(value){if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');return String(value);}
 export class LmsReader {
- constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.activities=new Map();}
+ constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.activities=new Map();this.termCache=null;this.termFlight=null;}
+ async termCatalog(yearIds=[]){
+  if(this.termCache&&Date.now()-this.termCache.at<300000)return this.termCache.data;
+  if(this.termFlight)return this.termFlight;
+  this.termFlight=(async()=>{
+   const results=await Promise.allSettled([this.get('/api/my-academic-years?fields=id,name,sort,is_active',5000),this.get('/api/my-semesters-all',5000)]);
+   const list=(result,key)=>{if(result.status!=='fulfilled')return [];const body=result.value,rows=Array.isArray(body)?body:body?.[key]||body?.data?.[key]||body?.data;return Array.isArray(rows)?rows.filter(row=>row&&/^\d{1,12}$/.test(String(row.id))):[];};
+   const data={academicYears:list(results[0],'academic_years'),semesters:list(results[1],'semesters')};
+   const ids=[...new Set([...yearIds,...data.academicYears.map(row=>String(row.id))])].filter(id=>/^\d{1,12}$/.test(id));
+   if(!data.semesters.length&&ids.length){try{const body=await this.get('/api/my-semesters?'+ids.map(id=>'academic_year_ids='+id).join('&'),5000);data.semesters=list({status:'fulfilled',value:body},'semesters');}catch{}}
+   if(data.academicYears.length&&data.semesters.length)this.termCache={at:Date.now(),data};return data;
+  })().finally(()=>this.termFlight=null);return this.termFlight;
+ }
  async response(path,options={}){
   const response=await this.fetcher(LMS_ORIGIN+path,{credentials:'include',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(20000),...options});
   if(!response.ok){const e=new Error(`新乐学返回 HTTP ${response.status}`);e.status=response.status;throw e;}return response;
  }
- async get(path){
-  const response=await this.response(path,{headers:{Accept:'application/json'}});
+ async get(path,timeout=12000){
+  const response=await this.response(path,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(timeout)});
   if(!/json/i.test(response.headers.get('content-type')||''))throw new Error('请登录新乐学');
   const data=await response.json();if(data.message==='未找到资源')throw new Error('未找到课程资源');return data;
  }
@@ -36,10 +48,15 @@ export class LmsReader {
   const userId=await this.userId(courseId),body=await this.get(`/api/activities/${id}/students/${userId}/submission_list`);
   return {rows:submissionRows(body),groupName:'',inGroup:true};
  }
- async read({kind,id,courseId,page=1}){
+ async read({kind,id,courseId,page=1,force=false}){
   if(kind==='courses'){
    const body=await this.get('/api/my-courses');if(!Array.isArray(body.courses||body.data?.courses))throw new Error('请登录新乐学');
-   const rows=lmsCourses(body);this.owned=new Set(rows.map(r=>r.id));return {rows};
+   if(force)this.termCache=null;
+   let rows=lmsCourses(body);if(rows.some(row=>!row.term)){
+    const yearIds=(body.courses||body.data.courses).map(row=>String(row.academic_year?.id??row.academic_year_id??(typeof row.academic_year!=='object'?row.academic_year:'')));
+    rows=lmsCourses(body,await this.termCatalog(yearIds));
+   }
+   this.owned=new Set(rows.map(r=>r.id));return {rows,termMetadataVersion:3,unresolvedTerms:rows.filter(row=>!row.term).length};
   }
   numeric(id);
   if(['resources','task'].includes(kind)){
@@ -56,7 +73,7 @@ export class LmsReader {
   await this.own(id);
   if(kind==='homework'){
    const n=Math.max(1,Math.min(100,Number(page)||1));
-   const [body,status]=await Promise.all([this.get(`/api/courses/${id}/homework-activities?page=${n}`),this.get(`/api/course/${id}/homework/submission-status`).catch(()=>({}))]);
+   const [body,status]=await Promise.all([this.get(`/api/courses/${id}/homework-activities?page=${n}`),this.get(`/api/course/${id}/homework/submission-status`,4000).catch(()=>({}))]);
    const rows=homeworkRows(body,status,id);rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows,page:Number(body.page)||n,pages:Number(body.pages)||1};
   }
   if(kind==='materials'){

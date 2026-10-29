@@ -33,3 +33,6 @@ test('a resolved legacy session keeps its own URL instead of adopting the parent
  assert.equal(new URL(siteHref(route)).pathname,'/session/71990');
  assert.equal(new URL(siteHref(referenceRoute({legacy:true,id:'71990'}))).pathname,'/course/71990');
 });
+
+
+test('an explicit all-semester task filter survives native URL navigation and reload',()=>{const url=siteHref('/tasks?term=&source=lexue');assert.equal(new URL(url).searchParams.has('yh_term'),true);assert.equal(new URL(url).searchParams.get('yh_term'),'');assert.equal(siteRoute(url),'/tasks?term=&source=lexue');});

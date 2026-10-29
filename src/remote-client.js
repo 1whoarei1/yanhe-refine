@@ -15,7 +15,7 @@ export class RemoteSources{
  reset(){}
 }
 export class RemoteLms{
- courses=()=>request('lms',{method:'courses',args:[]});
+ courses=force=>request('lms',{method:'courses',args:[Boolean(force)]});
  homeworks=id=>request('lms',{method:'homeworks',args:[id]});
  materials=id=>request('lms',{method:'materials',args:[id]});
  resources=(courseId,id)=>request('lms',{method:'resources',args:[courseId,id]});
