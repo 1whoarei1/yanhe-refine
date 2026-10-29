@@ -2,9 +2,9 @@
 
 直接在延河课堂原站整合课程、直播、回放、资料和待办，支持新版与旧版课堂。
 
-**当前修复预发布：0.10.5** · Edge / Chrome Manifest V3
+**当前正式版本：0.10.5** · Edge / Chrome Manifest V3
 
-[下载修复版](https://github.com/1whoarei1/yanhe-refine/releases/tag/v0.10.5) · [上一正式版](https://github.com/1whoarei1/yanhe-refine/releases/tag/v0.10.0) · [独立回放助手](https://github.com/1whoarei1/yanhe-replay) · [接口参考](https://github.com/1whoarei1/yanhe-api-reference) · [更新记录](CHANGELOG.md)
+[下载正式版](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [上一正式版](https://github.com/1whoarei1/yanhe-refine/releases/tag/v0.10.0) · [独立回放助手](https://github.com/1whoarei1/yanhe-replay) · [接口参考](https://github.com/1whoarei1/yanhe-api-reference) · [更新记录](CHANGELOG.md)
 
 ## 安装或更新
 
@@ -13,7 +13,7 @@
 3. 打开 [新版课堂](https://aita.yanhekt.cn/) 或 [旧版课堂](https://www.yanhekt.cn/)，沿用原站登录状态。
 4. 更新已有安装时备份原目录、替换扩展文件，在扩展管理页重新加载，再刷新课堂页面。
 
-**0.10.5 为修复预发布**：补上原站截图中的 `2026-20271季学期` 格式，归一为 `2026-2027-1`；仅有关系 ID 时补读字典，旧标签页的空解析结果会由新读取器重读。默认只扫描当前学期，学期未识别时明确标注结果不完整。截图原样格式和 55 门模拟课程的自动回归已通过，当前真实账号的最终待办数量仍未复核。
+**0.10.5 修复版**：补上原站截图中的 `2026-20271季学期` 格式，归一为 `2026-2027-1`；仅有关系 ID 时补读字典，旧标签页的空解析结果会由新读取器重读。默认只扫描当前学期，学期未识别时明确标注结果不完整。截图原样格式和 55 门模拟课程的自动回归已通过，当前真实账号的最终待办数量仍未复核。
 
 新乐学与旧乐学各自需要登录。在同一浏览器打开旧乐学登录入口完成 Moodle 登录后，返回课堂会重试失败的旧乐学连接；也可单独刷新旧乐学。只有用户对当前批次明确允许发布后，才推送或公开 Release。
 
