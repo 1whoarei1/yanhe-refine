@@ -12,6 +12,7 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
  with zipfile.ZipFile(archive) as z:
   names=z.namelist()
   assert len(names)==len(set(names))
+  assert not any('sha256' in Path(n).name.lower() or 'checksum' in Path(n).name.lower() for n in names)
   assert z.testzip() is None
   assert all(not n.startswith(('/', '../')) and '..' not in Path(n).parts for n in names)
   assert ('private-catalog.json' in names)==personal
@@ -57,6 +58,6 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
   for n in ['README.md','THIRD_PARTY_NOTICES.md','LICENSE','licenses/fflate.LICENSE','licenses/saxes.LICENSE','licenses/xmlchars.LICENSE','licenses/parse5.LICENSE','licenses/entities.LICENSE','licenses/BIT_yanhe_download.LICENSE','watch/vendor/hls.LICENSE','watch/vendor/md5.LICENSE','watch/vendor/mpegts.LICENSE','watch/vendor/mpegts.NOTICE.txt']:
    assert n in names,n
   assert not any(any(p in n.lower() for p in ['.sqlite','.env','session.json','node_modules/','test-results/','local-data/']) for n in names)
- report.append({'archive':str(archive),'personal':personal,'importableCatalog':has_import_catalog,'files':len(names),'bytes':archive.stat().st_size,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()})
+ report.append({'archive':str(archive),'personal':personal,'importableCatalog':has_import_catalog,'files':len(names),'bytes':archive.stat().st_size})
 (root/'test-results'/('session-package-report.json' if with_sessions else 'package-report.json')).write_text(json.dumps({'ok':True,'packages':report},ensure_ascii=False,indent=2),encoding='utf8')
 print(json.dumps({'ok':True,'packages':report},ensure_ascii=False))

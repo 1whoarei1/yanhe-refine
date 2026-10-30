@@ -32,13 +32,20 @@ async function database(){
 }
 export async function importCatalog(data){
  const checked=validateCatalogImport(data),db=await database();
- try{await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(checked.data,checked.kind);tx.oncomplete=resolve;tx.onerror=()=>reject(new Error('目录未保存，请检查浏览器存储空间。'));tx.onabort=()=>reject(new Error('目录保存已取消。'));});}finally{db.close();}
- cache.clear();await globalThis.chrome?.storage?.local?.set({'catalog:importRevision':Date.now()+Math.random()});
+ try{await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);let reason;
+  const previous=store.get(checked.kind);previous.onsuccess=()=>{
+   const date=value=>Date.parse(value?.generatedAt||value?.snapshot_date)||0,before=date(previous.result),after=date(checked.data);
+   if(before&&(!after||after<before)){reason=new Error(after?'这份目录比已导入的目录更旧，请选择最新目录。':'目录没有有效更新时间，不能覆盖现有目录。');tx.abort();return;}
+   try{store.put(checked.data,checked.kind);}catch{reason=new Error('目录未保存，原目录未更改。');tx.abort();}
+  };
+  tx.oncomplete=resolve;tx.onerror=()=>reject(new Error('目录未保存，请检查浏览器存储空间。'));tx.onabort=()=>reject(reason||new Error('目录保存已取消，原目录未更改。'));
+ });}finally{db.close();}
+ cache.clear();try{await globalThis.chrome?.storage?.local?.set({'catalog:importRevision':Date.now()+Math.random()});}catch{}
  return {kind:checked.kind,courses:checked.courses,sessions:checked.sessions};
 }
 export async function readImportedCatalog(kind){
  if(typeof indexedDB==='undefined'||!globalThis.chrome?.runtime)return null;
- if(!cache.has(kind))cache.set(kind,(async()=>{const db=await database();try{return await new Promise((resolve,reject)=>{const request=db.transaction(STORE).objectStore(STORE).get(kind);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(new Error('已导入目录暂时无法读取。'));});}finally{db.close();}})());
+ if(!cache.has(kind)){const flight=(async()=>{const db=await database();try{return await new Promise((resolve,reject)=>{const request=db.transaction(STORE).objectStore(STORE).get(kind);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(new Error('已导入目录暂时无法读取。'));});}finally{db.close();}})().catch(error=>{if(cache.get(kind)===flight)cache.delete(kind);throw error;});cache.set(kind,flight);}
  return cache.get(kind);
 }
 globalThis.chrome?.storage?.onChanged?.addListener((changes,area)=>{if(area==='local'&&changes['catalog:importRevision'])cache.clear();});

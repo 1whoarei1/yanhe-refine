@@ -17,7 +17,7 @@ const assignments=[{id:901,courseId:601,title:'旧课程当前作业一',deadlin
 const expected=['新版当前作业',...assignments.slice(0,3).map(row=>row.title)].sort();
 const shell=inside=>'<!doctype html><html><body>'+inside+'</body></html>';
 const report={version,mode:'isolated browser; synthetic new/old LMS responses, no real course or submission requests',checks:[]};
-let context,page,background,failedDetail=false,lexueConnected=false,slowNew=false,releaseNew,badNewCourses=false,badTermCatalog=false;
+let context,page,background,failedDetail=false,lexueConnected=false,slowNew=false,releaseNew,badNewCourses=false,badTermCatalog=false,slowOldCourses=false,releaseOldCourses;
 try{
  context=await chromium.launchPersistentContext(join(scratch,'profile'),{...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:process.platform==='win32'?{executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'}:{channel:'chromium'}),headless:true,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`],viewport:{width:1440,height:1000}});
  context.setDefaultTimeout(15000);
@@ -32,7 +32,7 @@ try{
   if(u.hostname==='lexue.bit.edu.cn'){
    if(!lexueConnected)return html(shell('<form action="/login/index.php"><button id="loginbtn">Login</button></form>'));
    if(path==='/my/')return html(shell('<script>M.cfg={"wwwroot":"https://lexue.bit.edu.cn","sesskey":"fixtureTasks123"};</script>'));
-   if(path==='/lib/ajax/service.php'){assert.equal(req.postDataJSON()[0].methodname,'core_course_get_enrolled_courses_by_timeline_classification');return json([{error:false,data:{courses:oldCourses,nextoffset:2}}]);}
+   if(path==='/lib/ajax/service.php'){if(slowOldCourses)await new Promise(resolve=>releaseOldCourses=resolve);assert.equal(req.postDataJSON()[0].methodname,'core_course_get_enrolled_courses_by_timeline_classification');return json([{error:false,data:{courses:oldCourses,nextoffset:2}}]);}
    if(path==='/course/view.php'){
     const id=Number(u.searchParams.get('id'));return html(`<!doctype html><html><body class="course-${id}"><main id="region-main">${assignments.filter(row=>row.courseId===id).map(row=>`<li class="activity modtype_assign" id="module-${row.id}"><a href="/mod/assign/view.php?id=${row.id}"><span class="instancename">${row.title}</span></a></li>`).join('')}</main></body></html>`);
    }
@@ -110,6 +110,12 @@ try{
  slowNew=false;releaseNew();await waitCount(4);
  await page.locator('#learning-results[aria-busy="false"]').waitFor();
  report.checks.push('a slow LMS endpoint does not blank the entire task page: completed old tasks and progress appear before the new task finishes');
+ slowOldCourses=true;
+ await page.getByRole('button',{name:'刷新当前页',exact:true}).click();
+ await page.locator('.task-row h3').getByText('新版当前作业',{exact:true}).waitFor();
+ await page.getByText('旧乐学正在读取，已完成的平台可先查看',{exact:false}).waitFor();assert.equal(typeof releaseOldCourses,'function');
+ slowOldCourses=false;releaseOldCourses();await waitCount(4);await page.locator('#learning-results[aria-busy="false"]').waitFor();
+ report.checks.push('new-LMS tasks render while the old-LMS course list itself is still loading, then merge the old tasks on completion');
  const oldRequests=requests.filter(r=>r.host==='lexue.bit.edu.cn').length;
  const onlyNew=await context.newPage();onlyNew.on('pageerror',error=>errors.push(error.message));
  await onlyNew.goto('https://aita.yanhekt.cn/personal/?yh_view=tasks&yh_source=lms');

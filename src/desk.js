@@ -2,7 +2,7 @@ import {courseKey,normalizeCourse,matchesCourse,isModernTerm,termLabel,hasSpecif
 import {explain,parseCourse} from './watch/core.js';
 import {safeRecords} from './records.js';
 
-import {RemoteCatalog,RemoteSources,RemoteLms,RemoteLexue} from './remote-client.js';
+import {RemoteCatalog,RemoteSources,RemoteLms,RemoteLexue,checkPluginUpdate} from './remote-client.js';
 import {nativeHref,referenceRoute} from './site-routes.js';
 import iconMarkup from './ui-icons.svg';
 import {courseworkUi} from './coursework-ui.js';
@@ -10,6 +10,7 @@ import {TeachingCourses} from './teaching-courses.js';
 import {currentTeachingTerm} from './teaching-terms.js';
 import {bindingSource,resolveBinding,setBinding,setBindingSource,safeBindings} from './course-bindings.js';
 import {CourseworkCache} from './coursework-cache.js';
+import {connectionStatus} from './connection-status.js';
 
 export function startDesk({root=document,currentRoute=()=>location.hash.slice(1)||'/today',navigate,replaceRoute,hrefForRoute=value=>value,site=false}={}){
 const $=id=>root.querySelector('#'+id),main=$('content');
@@ -28,7 +29,7 @@ function toast(value){$('toast').textContent=value;$('toast').hidden=false;clear
 function diagnostic(name,error){const message=explain(error);state.diagnostics.unshift(`${name}：${message}`);state.diagnostics=state.diagnostics.slice(0,20);return message;}
 function node(tag,attrs={},...children){const el=document.createElement(tag);for(const [k,v]of Object.entries(attrs)){if(v==null)continue;if(k==='class')el.className=v;else if(k==='onclick'||k==='onchange'||k==='onsubmit'||k==='oninput')el.addEventListener(k.slice(2),v);else if(k==='text')el.textContent=v;else el.setAttribute(k,k==='href'&&String(v).startsWith('#/')?hrefForRoute(v):String(v));}for(const c of children.flat(Infinity))if(c!=null)el.append(typeof c==='string'||typeof c==='number'?document.createTextNode(String(c)):c);return el;}
 function icon(name){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),symbol=symbols.getElementById(name);svg.setAttribute('aria-hidden','true');svg.setAttribute('viewBox',symbol?.getAttribute('viewBox')||'0 0 24 24');if(symbol)svg.append(...Array.from(symbol.childNodes).map(n=>n.cloneNode(true)));return svg;}
-function link(label,href,cls=''){if(site&&/^https:\/\/(aita|www)\.yanhekt\.cn/.test(href))href=nativeHref(href,{remember:label==='原站'});return node('a',{href,class:cls,...(href.startsWith('https:')?{target:site&&/yanhekt\.cn/.test(href)?'_self':'_blank',rel:'noreferrer'}:{})},label);}
+function link(label,href,cls='',{rememberNative=false}={}){if((site||rememberNative)&&/^https:\/\/(aita|www)\.yanhekt\.cn/.test(href))href=nativeHref(href,{remember:rememberNative||label==='原站'});return node('a',{href,class:cls,...(href.startsWith('https:')?{target:site&&/yanhekt\.cn/.test(href)?'_self':'_blank',rel:'noreferrer'}:{})},label);}
 function button(label,action,cls='',attrs={}){return node('button',{type:'button',class:cls,onclick:action,...attrs},label);}
 function loading(label='正在读取…'){return node('div',{class:'loading'},label);}
 function empty(label,actions=[]){return node('div',{class:'empty'},label,actions.length?node('div',{class:'inline-tools'},actions):null);}
@@ -44,17 +45,17 @@ function time(value){return value?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asi
 function deadline(value){return value?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(value):'无截止时间';}
 function formatPosition(seconds){const n=Math.max(0,Math.floor(seconds||0));return n>=3600?`${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`:`${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;}
 function pageInfo(value){state.classroomConnection=value?'connected':'error';$('account-link').classList.toggle('connected',Boolean(value));$('account-link').querySelector('span').textContent=value?'已连接':'课堂读取失败';}
-async function ensureMy(force=false){if(state.my&&!force)return state.my;if(state.myFlight)return state.myFlight;state.myFlight=(async()=>{try{const rows=await sources.modern.enrolled();state.my=rows;void catalog.call('upsert',{rows}).catch(e=>diagnostic('课程缓存',e));pageInfo(true);return rows;}catch(e){pageInfo(false);throw e;}finally{state.myFlight=null;}})();return state.myFlight;}
-async function ensureOld(force=false){if(state.oldMy&&!force)return state.oldMy;try{const rows=await sources.legacy.enrolled();state.oldMy=rows;state.oldClassroomConnection='connected';void catalog.call('upsert',{rows}).catch(()=>{});return rows;}catch(error){state.oldClassroomConnection='error';throw error;}}
+async function ensureMy(force=false){if(state.my&&!force)return state.my;if(state.myFlight)return state.myFlight;state.myFlight=(async()=>{try{const rows=await sources.modern.enrolled();state.my=rows;state.classroomError=null;void catalog.call('upsert',{rows}).catch(e=>diagnostic('课程缓存',e));pageInfo(true);return rows;}catch(e){state.classroomError=e;pageInfo(false);throw e;}finally{state.myFlight=null;}})();return state.myFlight;}
+async function ensureOld(force=false){if(state.oldMy&&!force)return state.oldMy;try{const rows=await sources.legacy.enrolled();state.oldMy=rows;state.oldClassroomConnection='connected';state.oldClassroomError=null;void catalog.call('upsert',{rows}).catch(()=>{});return rows;}catch(error){state.oldClassroomConnection='error';state.oldClassroomError=error;throw error;}}
 const teachingKey=course=>(course.source==='lexue'?'lexue:':'lms:')+course.id;
 const mappingKey=course=>course.source==='lexue'?'lexue:'+course.id:course.id;
 const teachingName=course=>course.source==='lexue'?'旧乐学':'新乐学';
-async function ensureLms(force=false,source){if(force||state.refresh)for(const cache of [taskCache,materialCache])for(const id of source?[source]:['lms','lexue'])cache.invalidate(id);const data=await teaching.load({force:force||state.refresh,source});state.lms=data.rows;state.lmsStatus=data.status;state.lmsErrors=data.errors;if(source&&data.status[source==='lexue'?1:0]===false)throw data.errors[source==='lexue'?1:0]||new Error('乐学读取失败');if(data.status.every(ok=>ok===false))throw new Error('请先登录新乐学或旧乐学');return data.rows;}
+async function ensureLms(force=false,source,onUpdate){if(force||state.refresh)for(const cache of [taskCache,materialCache])for(const id of source?[source]:['lms','lexue'])cache.invalidate(id);const update=data=>{state.lms=data.rows;state.lmsStatus=data.status;state.lmsErrors=data.errors;state.lmsLoading=data.loading;onUpdate?.(data);};const data=await teaching.load({force:force||state.refresh,source,onUpdate:update});update(data);if(source&&data.status[source==='lexue'?1:0]===false)throw data.errors[source==='lexue'?1:0]||new Error('乐学读取失败');if(data.status.every(ok=>ok===false))throw new Error('请先登录新乐学或旧乐学');return data.rows;}
 function teachingRetry(source,epoch){const label='重新读取'+(source==='lexue'?'旧乐学':'新乐学'),retry=button('刷新',async()=>{retry.disabled=true;try{await ensureLms(true,source);}catch(e){diagnostic('乐学连接',e);}if(epoch===state.epoch)void render();},'text-button',{'aria-label':label,title:label});return retry;}
 function teachingConnection(source,epoch){const old=source==='lexue';return empty(node('div',{},node('span',{role:'status'},(old?'旧乐学':'新乐学')+'未连接'),node('small',{},state.lmsErrors?.[old?1:0]?.message||(old?'旧乐学需要独立登录，任务尚未同步':'任务尚未同步'))),[link('登录'+(old?'旧乐学':'新乐学'),old?'https://lexue.bit.edu.cn/login/index.php':'https://zy-eclass.bit.edu.cn/user/courses#/','button-link'),teachingRetry(source,epoch)]);}
 function currentTeachingCourses(courses){const term=currentTeachingTerm();return courses.filter(course=>course.term===term);}
 async function pool(rows,limit,fn,onDone){const output=[];let next=0;await Promise.all(Array.from({length:Math.min(limit,rows.length)},async()=>{while(next<rows.length){const index=next++;try{output[index]={ok:true,value:await fn(rows[index])};}catch(error){output[index]={ok:false,error};}onDone?.(output.filter(Boolean));}}));return output;}
-function loginActions(kind='modern'){const url=kind==='lms'?'https://zy-eclass.bit.edu.cn/user/courses#/':kind==='legacy'?'https://www.yanhekt.cn/':'https://aita.yanhekt.cn/portal/#/';return [link('登录'+(kind==='lms'?'新乐学':kind==='legacy'?'旧版课堂':'延河课堂'),url,'button-link'),button('刷新',()=>void render(),'text-button')];}
+function loginActions(kind='modern'){const url=kind==='lms'?'https://zy-eclass.bit.edu.cn/user/courses#/':kind==='legacy'?'https://www.yanhekt.cn/home':'https://aita.yanhekt.cn/portal/#/';return [link('登录'+(kind==='lms'?'新乐学':kind==='legacy'?'旧延河':'新延河'),url,'button-link',{rememberNative:kind==='legacy'}),button('刷新',()=>void render(),'text-button')];}
 function favoriteButton(course){const el=button(icon('star'),async()=>{const selected=!state.favorites.has(course.key);selected?state.favorites.add(course.key):state.favorites.delete(course.key);try{await chrome.storage.local.set({'desk:favorites':[...state.favorites]});el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));}catch{selected?state.favorites.delete(course.key):state.favorites.add(course.key);toast('收藏未保存');}},'icon-button favorite'+(state.favorites.has(course.key)?' selected':''),{'aria-label':'收藏'+course.title,'aria-pressed':String(state.favorites.has(course.key)),title:'收藏'});return el;}
 function courseRow(course){return node('div',{class:'course-row','data-course-key':course.key},node('div',{},link(course.title,routeTo(course),'course-title'),node('div',{class:'course-college'},node('span',{},course.college||'课程'),node('span',{class:'course-mobile-meta'},[course.term,course.platform==='legacy'?'旧版':'新版'].filter(Boolean).join(' · ')))),button(course.teacher||'未标注',()=>go('#/courses?scope=all&platform='+course.platform+'&term='+encodeURIComponent(course.term)+'&q='+encodeURIComponent(course.teacher||course.title)),'teacher-button'),node('span',{class:'term'},course.term||'未标注学期'),node('span',{class:'source-label'},course.platform==='legacy'?'旧版':'新版'),favoriteButton(course));}
 function courseList(rows){return node('div',{class:'course-list'},rows.map(courseRow));}
@@ -74,7 +75,7 @@ async function todayPage(epoch){
  const currentKeys=new Set(currentTeachingCourses(state.lms||[]).map(teachingKey));
  const known=upcomingTasks([...state.tasks.entries()].filter(([key])=>currentKeys.has(key)).flatMap(([,rows])=>rows));
  if(known.length)taskPreview.replaceChildren(...known.map(t=>node('div',{class:'task-mini'},button(t.title,()=>void coursework.task({...t,source:t.source||'lms'}),'row-title'),node('small',{},t.courseTitle,node('time',{},deadline(t.deadline))))));
- void (async()=>{try{const courses=await ensureLms(),unresolved=courses.filter(c=>c.source==='lms'&&!hasSpecificTerm(c.term)).length;const data=await dataset('tasks',currentTeachingCourses(courses));if(epoch!==state.epoch)return;const rows=upcomingTasks(data.rows);taskPreview.replaceChildren(...(rows.length?rows.map(t=>node('div',{class:'task-mini'},button(t.title,()=>void coursework.task({...t,source:t.source||'lms'}),'row-title'),node('small',{},t.courseTitle,t.state==='unknown'?' · 待同步':'',node('time',{},deadline(t.deadline))))):[empty(unresolved?'学期信息未完整读取，暂时无法确认当前学期待办':data.failed?'部分作业未同步':'暂无未交作业')]),...(unresolved?[node('p',{class:'inline-notice inline-tools'},`${unresolved} 门新乐学课程的学期尚未识别，待办可能不完整`,teachingRetry('lms',epoch))]:[]),...(data.partial?[node('p',{class:'inline-notice'},'部分作业详情未同步')]:[]),...(data.failed?[node('p',{class:'inline-notice'},'部分课程任务未同步，请刷新重试')]:[]),...['lms','lexue'].filter((source,i)=>state.lmsStatus?.[i]===false).map(source=>teachingConnection(source,epoch)));}catch(e){diagnostic('近期作业',e);if(epoch===state.epoch)taskPreview.replaceChildren(empty('乐学未连接',[...loginActions('lms'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','text-button')]));}})();
+ let previewGeneration=0;const preview=async snapshot=>{const generation=++previewGeneration;try{const courses=snapshot.rows,unresolved=courses.filter(c=>c.source==='lms'&&!hasSpecificTerm(c.term)).length;const data=await dataset('tasks',currentTeachingCourses(courses));if(epoch!==state.epoch||generation!==previewGeneration)return;const pending=snapshot.loading.some(Boolean),rows=upcomingTasks(data.rows);taskPreview.replaceChildren(...(rows.length?rows.map(t=>node('div',{class:'task-mini'},button(t.title,()=>void coursework.task({...t,source:t.source||'lms'}),'row-title'),node('small',{},t.courseTitle,t.state==='unknown'?' · 待同步':'',node('time',{},deadline(t.deadline))))):[empty(pending?'部分平台正在读取，稍后继续更新':unresolved?'学期信息未完整读取，暂时无法确认当前学期待办':data.failed?'部分作业未同步':'暂无未交作业')]),...(unresolved?[node('p',{class:'inline-notice inline-tools'},`${unresolved} 门新乐学课程的学期尚未识别，待办可能不完整`,teachingRetry('lms',epoch))]:[]),...(data.partial?[node('p',{class:'inline-notice'},'部分作业详情未同步')]:[]),...(data.failed?[node('p',{class:'inline-notice'},'部分课程任务未同步，请刷新重试')]:[]),...['lms','lexue'].filter((source,i)=>state.lmsStatus?.[i]===false).map(source=>teachingConnection(source,epoch)));}catch(e){diagnostic('近期作业',e);if(epoch===state.epoch)taskPreview.replaceChildren(empty('乐学未连接',[...loginActions('lms'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','text-button')]));}};void ensureLms(false,undefined,snapshot=>{void preview(snapshot);}).catch(error=>diagnostic('近期作业',error));
  try{const mine=await ensureMy();
   if(epoch===state.epoch&&mine.length){const latest=mine.map(c=>c.term).sort().at(-1),shelf=node('section',{class:'today-courses'},node('div',{class:'section-heading'},node('h2',{},'我的课程'),link('全部','#/courses')),node('div',{class:'today-course-grid'},mine.filter(c=>c.term===latest).slice(0,8).map(c=>node('a',{class:'resume-row',href:routeTo(c)},node('span',{class:'course-mark'},icon('courses')),node('div',{class:'row-main'},node('h3',{},c.title),node('small',{},c.teacher))))));main.append(shelf);}
   const rows=await sources.modern.today(date);if(epoch!==state.epoch)return;
@@ -90,7 +91,7 @@ async function coursesPage(epoch,params){
  const indexMode=scope==='all'&&platform==='legacy';
  const filterTerms=state.stats.termsByPlatform?.[platform]||(platform==='modern'?state.stats.terms.filter(isModernTerm):state.stats.terms);
  const termFilter=select('学期',[['',indexMode?'选择学期':'全部学期'],...(indexMode?[]:filterTerms).map(t=>[t,t])],term,v=>change('term',v));
- const filter=node('div',{class:'filters'},select('平台',scope==='all'?[['modern','新版'],['legacy','旧版']]:[['all','全部平台'],['modern','新版'],['legacy','旧版']],platform,v=>go(courseHash({...values,platform:v,term:'',college:'',page:1}))),termFilter,indexMode?link('课程索引站','https://share.ruc.edu.kg/','text-button'):select('学院',[['','全部学院'],...state.stats.colleges.map(t=>[t,t])],college,v=>change('college',v)));
+ const filter=node('div',{class:'filters'},select('平台',scope==='all'?[['modern','新版'],['legacy','旧版']]:[['all','全部平台'],['modern','新版'],['legacy','旧版']],platform,v=>go(courseHash({...values,platform:v,term:'',college:'',page:1}))),termFilter,indexMode?null:select('学院',[['','全部学院'],...state.stats.colleges.map(t=>[t,t])],college,v=>change('college',v)));
  const results=node('div',{},loading()),caption=node('div',{class:'list-heading'},node('span',{},'课程'),node('span',{},''));
  const pageNode=node('div',{class:'pagination'}),teaching=node('section',{class:'section-space'});
  setPage(epoch,heading('课程','',[scope==='all'&&/^\d{1,12}$/.test(q)?link('打开旧版课次 '+q,`#/session/legacy/${q}?tab=watch`,'button-link'):null,link('导入目录','#/settings','button-link')]),tabs([['my','我的课程',courseHash({scope:'my'})],['all','全校课程',courseHash({scope:'all'})],['favorites','收藏',courseHash({scope:'favorites'})],['recent','最近',courseHash({scope:'recent'})]],scope),filter,caption,results,pageNode,teaching);
@@ -104,8 +105,8 @@ async function coursesPage(epoch,params){
   rows=(await recentCourses()).map(r=>r.course).filter(r=>matchesCourse(r,{q,platform,term,teacher,college}));total=rows.length;
  }else if(indexMode){
   try{const meta=await sources.index.terms();if(epoch!==state.epoch)return;const validTerms=meta.terms.filter(hasSpecificTerm),chosen=term||validTerms[0]||'';values.term=chosen;const field=termFilter.matches('select')?termFilter:termFilter.querySelector('select');field.replaceChildren(new Option('选择学期',''),...validTerms.map(t=>new Option(t,t)));field.value=chosen;
-   const result=await sources.index.search(q||teacher,{page,term:chosen});rows=result.rows;total=result.total;partial=`旧版课程索引 · 尚未完整${result.reportedTotal>total?' · 共匹配 '+result.reportedTotal+' 门，仅返回前 '+total+' 门':''}${result.truncated?' · 候选范围受限':''}`;if(rows.length)await catalog.call('upsert',{rows}).catch(()=>{});
-  }catch(e){if(epoch===state.epoch){caption.lastChild.textContent='索引读取失败';results.replaceChildren(empty(e.message,[link('打开索引站','https://share.ruc.edu.kg/','button-link'),button('重试',()=>void render(),'text-button')]));}return;}
+   const result=await sources.index.search(q||teacher,{page,term:chosen});rows=result.rows;total=result.total;partial=`旧版课次目录${result.partial?' · 持续收集中':''}${result.reportedTotal>total?' · 共匹配 '+result.reportedTotal+' 门，仅返回前 '+total+' 门':''}${result.truncated?' · 候选范围受限':''}`;if(rows.length)await catalog.call('upsert',{rows}).catch(()=>{});
+  }catch(e){if(epoch===state.epoch){caption.lastChild.textContent='目录读取失败';results.replaceChildren(empty(e.message,[link('导入目录','#/settings','button-link'),button('重试',()=>void render(),'text-button')]));}return;}
  }else{
   const query={q,platform,term,teacher,college,offset:(page-1)*40,limit:40};
   const cached=await catalog.call('search',query);
@@ -119,7 +120,7 @@ async function coursesPage(epoch,params){
  }
  if(epoch!==state.epoch)return;
  caption.lastChild.textContent=[`${total.toLocaleString()} 门`,partial].filter(Boolean).join('　');
- results.replaceChildren(rows.length?courseList(rows):empty(q?'没有匹配课程':scope==='favorites'?'还没有收藏':scope==='recent'?'还没有观看记录':indexMode?'请输入课程名或教师；索引尚未完整':platform==='legacy'?'暂无旧版课程':'暂无课程',[indexMode?link('打开索引站','https://share.ruc.edu.kg/','text-button'):link('全校找课','#/courses?scope=all','text-button')]));
+ results.replaceChildren(rows.length?courseList(rows):empty(q?'没有匹配课程':scope==='favorites'?'还没有收藏':scope==='recent'?'还没有观看记录':indexMode?'没有匹配课程，可更换学期或更新旧版课次目录':platform==='legacy'?'暂无旧版课程':'暂无课程',[indexMode?link('导入目录','#/settings','text-button'):link('全校找课','#/courses?scope=all','text-button')]));
  if(total>40)pageNode.append(button('上一页',()=>go(courseHash({...values,page:page-1})),'',page===1?{disabled:''}:{}),node('span',{},`${page} / ${Math.max(1,Math.ceil(total/40))}`),button('下一页',()=>go(courseHash({...values,page:page+1})),'',page*40>=total?{disabled:''}:{}));
 }
 
@@ -195,7 +196,8 @@ async function courseMaterials(epoch,course,area,params){
  const platform=select('乐学平台',[['lms','新乐学'],['lexue','旧乐学']],source,value=>{if(epoch!==state.epoch)return;setBindingSource(state.bindings,course,value);void chrome.storage.local.set({'desk:bindings':state.bindings}).catch(e=>diagnostic('课程关联',e));go(routeTo(course,'materials')+'&source='+value);});
  const associated=node('div',{class:'inline-tools'},platform);
  area.replaceChildren(associated,loading());
- let mine=[];try{mine=await ensureLms();}catch(e){diagnostic('乐学连接',e);}
+ if(state.refresh)void ensureLms(true).catch(e=>diagnostic('乐学连接',e));
+ let mine=[];try{mine=await ensureLms(false,source);}catch(e){diagnostic('乐学连接',e);}
  if(epoch!==state.epoch)return;
  const my=state.my||await ensureMy().catch(()=>[]),official=my.find(c=>c.key===course.key)?.lmsId;
  if(epoch!==state.epoch)return;
@@ -216,13 +218,12 @@ function taskList(rows){return node('div',{},rows.map(t=>{const label=taskState(
 function materialList(rows){if(!rows.length)return empty('暂无已发布资料');return node('div',{},rows.map(r=>node('div',{class:'material-row'},node('div',{class:'file-mark'},icon('files')),node('div',{},node('h3',{},button(r.title,()=>void coursework.resources(r),'row-title')),node('small',{},r.courseTitle,r.source==='lexue'?' · 旧乐学':'')),button('附件',()=>void coursework.resources(r),'attachment-button'),link(icon('arrow'),r.url,'icon-button'))));}
 async function learningPage(epoch,kind,params){
  const isTasks=kind==='tasks',body=node('div',{},loading());setPage(epoch,heading(isTasks?'待办':'资料','',[link('新乐学','https://zy-eclass.bit.edu.cn/user/courses#/','button-link'),link('旧乐学','https://lexue.bit.edu.cn/my/','button-link')]),body);
- let courses=[],classroom=[],lmsConnected=true,classroomConnected=true;
+ let courses=[],classroom=[],lmsConnected=null,classroomConnected=null,lmsError=null,paintId=0;
  const source=['lms','lexue','modern'].includes(params.get('source'))?params.get('source'):'all';
- const fetched=await Promise.allSettled([ensureLms(false,['lms','lexue'].includes(source)?source:undefined),isTasks?Promise.resolve([]):ensureMy()]);
- if(fetched[0].status==='fulfilled')courses=fetched[0].value;else{lmsConnected=false;diagnostic('新乐学',fetched[0].reason);}
- if(fetched[1].status==='fulfilled')classroom=fetched[1].value;else{classroomConnected=false;diagnostic('课堂资料',fetched[1].reason);}
- if(!courses.length&&!classroom.length&&!lmsConnected){if(epoch===state.epoch)body.replaceChildren(empty((source==='lms'?'新乐学':source==='lexue'?'旧乐学':'乐学')+'读取失败：'+explain(fetched[0].reason),[button('重试',()=>void render(),'button-link'),...loginActions('lms'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','button-link')]));return;}
- if(epoch!==state.epoch)return;
+ const pendingSources=()=>['lms','lexue'].filter((id,i)=>(source==='all'||source===id)&&state.lmsLoading?.[i]);
+ async function paint(){
+ const generation=++paintId;if(epoch!==state.epoch)return;
+ if(!courses.length&&!classroom.length&&lmsConnected===false&&!pendingSources().length){body.replaceChildren(empty((source==='lms'?'新乐学':source==='lexue'?'旧乐学':'乐学')+'读取失败：'+explain(lmsError),[button('重试',()=>void render(),'button-link'),...loginActions('lms'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','button-link')]));return;}
  const options=[...courses.map(c=>({...c,filterKey:teachingKey(c)})),...classroom.map(c=>({...c,filterKey:c.key,source:'modern'}))].filter(c=>source==='all'||c.source===source);
  const terms=courseTermOptions(options),current=currentTeachingTerm(),unmatchedCurrent=isTasks&&!terms.includes(current);if(unmatchedCurrent){terms.push(current);terms.sort().reverse();}const requestedTerm=termLabel(params.get('term')),term=params.has('term')?(terms.includes(requestedTerm)?requestedTerm:''):(isTasks?current:terms[0]||''),courseId=params.get('course')||'',status=params.get('state')||'pending';
  const selected=courses.filter(c=>(source==='all'||c.source===source)&&(!term||c.term===term)&&(!courseId||teachingKey(c)===courseId));
@@ -232,17 +233,22 @@ async function learningPage(epoch,kind,params){
  if(isTasks)filters.append(select('提交状态',[['pending','未交'],['submitted','已交'],['all','全部']],status,v=>change('state',v)));
  const results=node('div',{id:'learning-results','aria-busy':'true'},loading());body.replaceChildren(filters,results);
  const unresolved=term?options.filter(c=>c.source==='lms'&&!hasSpecificTerm(c.term)).length:0;
- const updateResults=(data,shared={rows:[],failed:0},progress=false)=>{if(epoch!==state.epoch)return;results.setAttribute('aria-busy',String(progress));
+ const updateResults=(data,shared={rows:[],failed:0},progress=false)=>{if(epoch!==state.epoch||generation!==paintId)return;const pending=pendingSources();progress=progress||pending.length>0||classroomConnected===null;results.setAttribute('aria-busy',String(progress));
  let rows=[...shared.rows,...data.rows];if(isTasks)rows=rows.filter(r=>status==='all'||(status==='pending'?pendingTask(r):r.state===status)).sort((a,b)=>(a.deadline||Infinity)-(b.deadline||Infinity));
- const notices=[];if(unresolved)notices.push(`${unresolved} 门新乐学课程的学期尚未识别，当前筛选结果不完整`,teachingRetry('lms',epoch));if(data.failed+shared.failed)notices.push(`${data.failed+shared.failed} 门课程未同步，请刷新重试`);if(data.partial)notices.push('部分作业详情未同步');if((source==='all'||source==='lms')&&(!lmsConnected||state.lmsStatus?.[0]===false))notices.push(link('登录新乐学','https://zy-eclass.bit.edu.cn/user/courses#/','text-button'),teachingRetry('lms',epoch));if((source==='all'||source==='lexue')&&(!lmsConnected||state.lmsStatus?.[1]===false))notices.push(node('span',{role:'status'},isTasks?'旧乐学未连接，旧乐学任务尚未同步':'旧乐学未连接，资料尚未同步'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','text-button'),teachingRetry('lexue',epoch));if(!classroomConnected)notices.push('课堂未连接');
- if(progress)notices.unshift(`已读取 ${data.completed}/${data.total} 门课程，${rows.length} 项待办`);
+ const notices=[];if(pending.length)notices.push(pending.map(id=>id==='lms'?'新乐学':'旧乐学').join('、')+'正在读取，已完成的平台可先查看');if(unresolved)notices.push(`${unresolved} 门新乐学课程的学期尚未识别，当前筛选结果不完整`,teachingRetry('lms',epoch));if(data.failed+shared.failed)notices.push(`${data.failed+shared.failed} 门课程未同步，请刷新重试`);if(data.partial)notices.push('部分作业详情未同步');if((source==='all'||source==='lms')&&(lmsConnected===false||state.lmsStatus?.[0]===false))notices.push(link('登录新乐学','https://zy-eclass.bit.edu.cn/user/courses#/','text-button'),teachingRetry('lms',epoch));if((source==='all'||source==='lexue')&&(lmsConnected===false||state.lmsStatus?.[1]===false))notices.push(node('span',{role:'status'},isTasks?'旧乐学未连接，旧乐学任务尚未同步':'旧乐学未连接，资料尚未同步'),link('登录旧乐学','https://lexue.bit.edu.cn/login/index.php','text-button'),teachingRetry('lexue',epoch));if(classroomConnected===false)notices.push('新延河读取失败');
+ if(progress&&isTasks)notices.unshift(`已读取 ${data.completed}/${data.total} 门课程，${rows.length} 项待办`);
  results.replaceChildren(...(notices.length?[node('p',{class:'inline-notice inline-tools'},notices)]:[]),isTasks?(rows.length?taskList(rows):(progress?loading('正在读取作业…'):empty(unresolved?'学期信息未完整读取，暂时无法确认当前学期待办':data.failed?'作业未能完整读取，请刷新重试':status==='submitted'?'暂无已交作业':status==='all'?'暂无已发布作业':'暂无未交作业'))):materialList(rows));
  };
  if(isTasks)updateResults({rows:[],failed:0,partial:0,completed:0,total:selected.length},undefined,true);
- const [data,shared]=await Promise.all([dataset(kind,selected,state.refresh,isTasks?data=>updateResults(data,undefined,true):undefined),isTasks?Promise.resolve({rows:[],failed:0}):classroomMaterials(selectedClassroom,state.refresh)]);if(epoch!==state.epoch)return;
+ const [data,shared]=await Promise.all([dataset(kind,selected,false,isTasks?data=>updateResults(data,undefined,true):undefined),isTasks?Promise.resolve({rows:[],failed:0}):classroomMaterials(selectedClassroom,state.refresh)]);if(epoch!==state.epoch||generation!==paintId)return;
  if(!isTasks&&courseId)filters.append(coursework.allButton([...shared.rows,...data.rows],options.find(c=>c.filterKey===courseId)?.title));
  updateResults(data,shared);
 
+ }
+ const repaint=()=>{void paint().catch(error=>diagnostic('资料与待办',error));};
+ const teachingRead=source==='modern'?Promise.resolve():ensureLms(false,['lms','lexue'].includes(source)?source:undefined,data=>{courses=data.rows;lmsConnected=data.status.some(value=>value===true)?true:null;repaint();}).catch(error=>{lmsError=error;lmsConnected=false;diagnostic('乐学连接',error);repaint();});
+ const classroomRead=!isTasks&&['all','modern'].includes(source)?ensureMy().then(rows=>{classroom=rows;classroomConnected=true;repaint();},error=>{classroomConnected=false;diagnostic('课堂资料',error);repaint();}):Promise.resolve().then(()=>{classroomConnected=true;});
+ await Promise.all([teachingRead,classroomRead]);await paint();
 }
 
 async function exportRecords(){const blob=new Blob([JSON.stringify(safeRecords(await chrome.storage.local.get(null)),null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=link('','');a.href=url;a.download='延河学习记录.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
@@ -250,13 +256,51 @@ async function settingsPage(epoch){
  const input=node('input',{id:'catalog-file',type:'file',accept:'.xlsx,.json',hidden:'',onchange:async event=>{const input=event.target,file=input.files[0];if(!file)return;const status=$('import-state');status.textContent='正在导入…';try{state.stats=await catalog.call('import',{name:file.name,buffer:await file.arrayBuffer()},count=>status.textContent=`已读取 ${count.toLocaleString()} 门`);status.textContent=state.stats.importedSessions?`已导入 ${state.stats.imported.toLocaleString()} 门旧版课程 / ${state.stats.importedSessions.toLocaleString()} 个课次`:`${state.stats.count.toLocaleString()} 门`;toast('课程目录已更新');}catch(e){status.textContent='导入失败';toast(diagnostic('课程导入',e));}input.value='';}});
  const records=node('input',{id:'records-file',type:'file',accept:'.json',hidden:'',onchange:async event=>{const file=event.target.files[0];if(!file)return;try{if(file.size>10*1024*1024)throw new Error('记录文件超过 10 MB');const value=safeRecords(JSON.parse(await file.text()));await chrome.storage.local.set(value);state.favorites=new Set(value['desk:favorites']||[...state.favorites]);state.mappings=value['desk:mappings']||state.mappings;state.bindings=value['desk:bindings']||state.bindings;toast('学习记录已导入');}catch(e){toast(diagnostic('记录导入',e));}input.value='';}});
  const setting=(title,sub,tools)=>node('div',{class:'setting-row'},node('div',{},node('h3',{},title),node('p',{},sub)),node('div',{class:'inline-tools'},tools));
- const connectionText=()=>['新版课堂'+(state.classroomConnection==='connected'?'已连接':state.classroomConnection==='error'?'读取失败':'尚未检查'),'旧版课堂'+(state.oldClassroomConnection==='connected'?'已连接':state.oldClassroomConnection==='error'?'读取失败':'尚未检查'),...['新乐学','旧乐学'].map((name,i)=>name+(state.lmsStatus?.[i]===true?'已连接':state.lmsStatus?.[i]===false?'读取失败':'尚未检查'))].join('　');
- const connectionStatus=node('span',{id:'connection-status',role:'status'},connectionText());
- const checkConnections=button('检查连接',async()=>{checkConnections.disabled=true;connectionStatus.textContent='正在检查四个平台…';await Promise.allSettled([ensureMy(true),ensureOld(true),ensureLms(true)]);if(epoch===state.epoch)connectionStatus.textContent=connectionText();checkConnections.disabled=false;});
+ const pendingConnections=new Set();
+ const platforms=[['modern','新延河','https://aita.yanhekt.cn/portal/#/'],['legacy','旧延河','https://www.yanhekt.cn/home'],['lms','新乐学','https://zy-eclass.bit.edu.cn/user/courses#/'],['lexue','旧乐学','https://lexue.bit.edu.cn/my/']];
+ const connectionEntries=platforms.map(([id,name,url])=>{
+  const marker=node('span',{class:'connection-marker','aria-hidden':'true'}),label=node('span');
+  const status=node('span',{id:'connection-'+id,class:'connection-state',role:'status'},marker,label);
+  const entry=link('',url,'connection-entry',{rememberNative:id==='legacy'});
+  entry.setAttribute('aria-label',name);entry.setAttribute('aria-describedby',status.id);
+  entry.append(node('span',{class:'connection-name'},name),status);
+  return {id,entry,marker,label};
+ });
+ const updateConnections=()=>{
+  if(epoch!==state.epoch)return;
+  const connected=value=>value==='connected'?true:value==='error'?false:undefined;
+  const snapshots=[{connected:connected(state.classroomConnection),error:state.classroomError,loading:Boolean(state.myFlight)},{connected:connected(state.oldClassroomConnection),error:state.oldClassroomError},...[0,1].map(i=>({connected:state.lmsStatus?.[i],error:state.lmsErrors?.[i],loading:state.lmsLoading?.[i]}))];
+  connectionEntries.forEach(({id,entry,marker,label},i)=>{
+   const view=connectionStatus({...snapshots[i],loading:pendingConnections.has(id)||snapshots[i].loading});
+   entry.dataset.state=view.state;marker.textContent=view.symbol;label.textContent=view.label;
+  });
+ };
+ const checkConnections=button('检查连接',async()=>{
+  checkConnections.disabled=true;checkConnections.textContent='检查中…';platforms.forEach(([id])=>pendingConnections.add(id));updateConnections();
+  const complete=id=>{pendingConnections.delete(id);updateConnections();};
+  try{await Promise.allSettled([
+   ensureMy(true).finally(()=>complete('modern')),ensureOld(true).finally(()=>complete('legacy')),
+   ensureLms(true,undefined,data=>{['lms','lexue'].forEach((id,i)=>{if(!data.loading[i])pendingConnections.delete(id);});updateConnections();}).finally(()=>{complete('lms');complete('lexue');})
+  ]);}finally{checkConnections.disabled=false;checkConnections.textContent='检查连接';updateConnections();}
+ },'button-link');
+ const connections=node('section',{class:'setting-row connection-setting','aria-labelledby':'connection-heading'},node('h3',{id:'connection-heading'},'连接'),node('div',{class:'connection-tools'},node('div',{id:'connection-status',class:'connection-grid'},connectionEntries.map(({entry})=>entry)),checkConnections));
+ updateConnections();
+ const updateStatus=node('span',{id:'update-status',role:'status'},'当前版本 '+state.version+' · 尚未检查');
+ const releaseLink=link('发布页','https://github.com/1whoarei1/yanhe-refine/releases/latest','button-link');releaseLink.hidden=true;
+ const checkUpdate=button('检查更新',async()=>{
+  checkUpdate.disabled=true;updateStatus.textContent='正在检查更新…';releaseLink.hidden=true;releaseLink.href='https://github.com/1whoarei1/yanhe-refine/releases/latest';releaseLink.textContent='发布页';
+  try{const result=await checkPluginUpdate();if(epoch!==state.epoch)return;
+   updateStatus.textContent=result.available?'发现新版本 '+result.latestVersion+'（当前 '+result.currentVersion+'）':result.ahead?'当前版本高于最新发布版 '+result.latestVersion:'未发现新版本（最新发布 '+result.latestVersion+'）';
+   if(result.available){releaseLink.href=result.downloadUrl||result.releaseUrl;releaseLink.textContent=result.downloadUrl?'下载新版':'查看新版';releaseLink.hidden=false;}
+  }catch(error){if(epoch===state.epoch){updateStatus.textContent=error.message;releaseLink.hidden=false;}}
+  finally{checkUpdate.disabled=false;}
+ },'button-link');
  const section=node('div',{class:'settings'},setting('课程目录',`旧版 ${state.stats.legacy.toLocaleString()}　新版 ${state.stats.modern.toLocaleString()}`,[node('span',{id:'import-state',class:'muted'},`${state.stats.count.toLocaleString()} 门`),button('导入课程表',()=>input.click()),input]),
   setting('学习记录','播放进度、字幕校准与收藏',[button('导出',()=>void exportRecords()),button('导入',()=>records.click()),records]),
-  setting('连接',connectionStatus,[checkConnections,link('延河课堂','https://aita.yanhekt.cn/portal/#/','button-link'),link('旧版','https://www.yanhekt.cn/','button-link'),link('新乐学','https://zy-eclass.bit.edu.cn/user/courses#/','button-link'),link('旧乐学','https://lexue.bit.edu.cn/my/','button-link')]),
-  setting('时间','课表与截止时间使用北京时间',[]),setting('延河焕新',state.version,[link('项目仓库','https://github.com/1whoarei1/yanhe-refine','text-button')]),
+  connections,
+  setting('时间','课表与截止时间使用北京时间',[]),
+  setting('延河焕新',updateStatus,[checkUpdate,link('项目仓库','https://github.com/1whoarei1/yanhe-refine','button-link'),releaseLink]),
+  setting('友情链接','课程工具与资料分享',[link('Yanhekt-AutoSlides','https://github.com/bit-admin/Yanhekt-AutoSlides','button-link'),link('BITShare · 资料分享站','https://bitshare.com.cn/','button-link')]),
   node('details',{},node('summary',{},'诊断'),node('pre',{},state.diagnostics.length?state.diagnostics.join('\n'):'暂无错误')));
  setPage(epoch,heading('设置',''),section);
 }

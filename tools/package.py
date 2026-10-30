@@ -58,16 +58,14 @@ if with_imports:
  assert snapshot['format']=='yanhekt-session-index/v1' and snapshot['source']['kind']=='self-collected'
  assert session_file.stat().st_size<=32*1024*1024
  shutil.copy2(session_file,folder/directory/'旧版课次目录.json');files.append(directory/'旧版课次目录.json')
- instructions=f"""新版课程目录：课程目录.json（{len(catalog['courses']):,} 门课程）
-旧版课次目录：旧版课次目录.json（{len(snapshot['courses']):,} 门课程 / {sum(len(c['sessions']) for c in snapshot['courses']):,} 个 session）
-快照时间：{snapshot['generatedAt']}；旧版数据仍在采集中，不代表完整覆盖。
+ instructions=f"""在「设置 → 导入课程表」中，分别导入本文件夹的两个 JSON。
 
-焕新：打开「设置」→「导入课程表」，依次选择上述两个 JSON。
-回放助手：打开「全校课程」→「导入目录」，依次选择上述两个 JSON。
-目录导入后保存在当前浏览器的扩展本地存储中，可离线检索；播放仍需原站登录和相应权限。
-更新目录时导入新的同类文件即可。包内不含旧版 XLSX、账号信息、观看记录或媒体地址。
+新版：课程目录.json（{len(catalog['courses']):,} 门课程）
+旧版：旧版课次目录.json（{len(snapshot['courses']):,} 门课程、{sum(len(c['sessions']) for c in snapshot['courses']):,} 个课次）
+旧版快照：{snapshot['generatedAt']}，持续采集中。
 
-感谢 bit-admin / Yanhekt-AutoSlides 公开 session 索引器；旧版快照来自我们独立采集的元数据。
+更新目录时重新导入即可。目录可离线检索，观看仍需登录原站。
+回放助手可在「全校课程 → 导入目录」中使用这两份文件。
 """
  (folder/directory/'导入说明.txt').write_text(instructions,encoding='utf8')
 archive=folder.parent/(folder.name+'.zip')

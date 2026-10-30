@@ -11,6 +11,8 @@ import {isPlatformPage} from './site-routes.js';
 import {LmsWriter} from './lms-writer.js';
 import {attachmentUrl} from './lms-core.js';
 import {AttachmentDownloads} from './downloads.js';
+import {checkForUpdate} from './update-check.js';
+let updateFlight;
 
 const sources=new CourseSources({hash:md5}),lms=new LmsClient(),lexue=new LexueClient();let ready;
 const writer=new LmsWriter(lms.fallback),downloads=new AttachmentDownloads();
@@ -24,6 +26,7 @@ async function catalogReady(){
 const numeric=value=>{if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');};
 export function trustedReader(sender){return sender.id===chrome.runtime.id&&(sender.url?.startsWith(chrome.runtime.getURL(''))||Boolean(sender.tab&&isPlatformPage(sender.url)));}
 export async function readOperation(operation,args={}){
+ if(operation==='checkUpdate'){if(!updateFlight)updateFlight=checkForUpdate(chrome.runtime.getManifest().version).finally(()=>updateFlight=null);return updateFlight;}
  if(operation==='catalog'){
   const {type}=args;if(!['init','stats','get','search','related','upsert','import'].includes(type))throw new Error('不支持的目录操作');
   await catalogReady();if(type==='init')return catalogOperation('stats');
@@ -64,5 +67,6 @@ export async function readOperation(operation,args={}){
   return downloads.start(attachmentUrl(file),file.name+(file.type==='folder'?'.zip':''),args.folder);
  }
  if(operation==='downloadStatus')return downloads.status(args.ids);
+ if(operation==='cancelDownload')return downloads.cancel(args.id);
  throw new Error('不支持的操作');
 }

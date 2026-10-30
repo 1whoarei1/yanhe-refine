@@ -22,7 +22,7 @@ export class SessionIndex {
    }
    return {courses,partial:data.partial,updatedAt:Date.parse(data.generatedAt)||null,sessionCount:owners.size};
   })();
-  const data=await this.flight;signal?.throwIfAborted();return data;
+  const flight=this.flight;let data;try{data=await flight;}catch(error){if(this.flight===flight)this.flight=null;throw error;}signal?.throwIfAborted();return data;
  }
  async terms(signal){const data=await this.load(signal);if(!data)return null;return {terms:[...new Set([...data.courses.values()].map(c=>c.term).filter(Boolean))].sort().reverse(),updatedAt:data.updatedAt,dataset:'self-collected',partial:data.partial,courseCount:data.courses.size,sessionCount:data.sessionCount};}
  async search(query='',{page=1,term='',signal}={}){

@@ -6,6 +6,7 @@ import {mountSite} from './site-entry.js';
 if(window.top===window){
  const own=chrome.runtime.getURL(''),reader=location.origin==='https://zy-eclass.bit.edu.cn'?new LmsReader():null;
  const oldReader=location.origin==='https://lexue.bit.edu.cn'?new LexueReader():null;
+ const reads=new Map();
  chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(sender.id!==chrome.runtime.id||!(sender.url?.startsWith(own)||(!sender.url&&!sender.tab)))return;
   if(message.type==='REFINE_GET_VIEW'&&classroomUrl(location.href)){respond({mode:document.documentElement.dataset.refine==='active'?'refine':'native'});return;}
@@ -16,8 +17,10 @@ if(window.top===window){
   if(message.type==='READ_AUTH_COOKIE'&&location.origin==='https://aita.yanhekt.cn'){
    const values=document.cookie.split(';').map(x=>x.trim()).filter(x=>x.startsWith('_token=')).map(x=>x.slice(7));const token=new URL(location.href).searchParams.get('token');if(token)values.push(token);respond({values});return;
   }
-  if(message.type==='DESK_LMS_READ'&&reader){reader.read(message.args||{}).then(data=>respond({ok:true,data}),e=>respond({ok:false,error:e.message}));return true;}
-  if(message.type==='DESK_LEXUE_READ'&&oldReader){oldReader.read(message.args||{}).then(data=>respond({ok:true,data}),e=>respond({ok:false,error:e.message}));return true;}
+  if(message.type==='DESK_READER_PING'){respond({version:1,kind:reader?'lms':oldReader?'lexue':null});return;}
+  if(message.type==='DESK_READER_CANCEL'){reads.get(message.requestId)?.abort();respond({ok:true});return;}
+  const selected=message.type==='DESK_LMS_READ'?reader:message.type==='DESK_LEXUE_READ'?oldReader:null;
+  if(selected){const controller=new AbortController(),id=message.requestId;if(id)reads.set(id,controller);selected.read({...message.args,signal:controller.signal}).then(data=>respond({ok:true,data}),e=>respond({ok:false,error:e.message})).finally(()=>{if(id&&reads.get(id)===controller)reads.delete(id);});return true;}
  });
  void (async()=>{const mode=classroomUrl(location.href)?await readSiteMode(location.href):'native';
  if(mode==='refine'&&siteRoute(location.href)){

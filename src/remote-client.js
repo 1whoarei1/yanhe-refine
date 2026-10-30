@@ -33,3 +33,5 @@ export class RemoteLexue{
 }
 export const downloadAttachment=args=>request('download',args);
 export const downloadStatus=ids=>request('downloadStatus',{ids});
+export const cancelDownload=id=>request('cancelDownload',{id});
+export const checkPluginUpdate=()=>request('checkUpdate',{});

@@ -5,25 +5,20 @@ import {AutoSlidesIndex,indexedSession,mergeSessionSelection} from '../src/watch
 import {LegacyYanheApi} from '../src/watch/legacy-api.js';
 
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
-test('index search is anonymous, bounded to returned results, and locally paged without claiming complete coverage',async()=>{
- const requests=[],api=new AutoSlidesIndex({fetcher:async(raw,options)=>{const u=new URL(raw);requests.push(u);assert.equal(u.origin,'https://share.ruc.edu.kg');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');assert.deepEqual(options.headers,{Accept:'application/json'});return json({total:6000,truncated:true,results:Array.from({length:200},(_,i)=>({id:100+i,name:'旧课程',term:'2026-2027-1',number:null,teachers:['教师'],sessionCount:3}))});}});
- const result=await api.search('旧课程',{term:'2026-2027-1',page:5});assert.equal(result.rows.length,40);assert.equal(result.total,200);assert.equal(result.reportedTotal,6000);assert.equal(result.truncated,true);assert.equal(result.rows[0].id,'260');assert.equal(result.rows[0].indexSessionCount,3);assert.equal(result.rows[0].replayCount,undefined);
- await api.search('旧课程',{term:'2026-2027-1',page:1});assert.equal(requests.length,1);assert.equal(requests[0].searchParams.has('page'),false);assert.equal(requests[0].searchParams.get('term'),'2026-2027-1');
+const snapshot=()=>({format:'yanhekt-session-index/v1',source:{kind:'self-collected'},partial:true,generatedAt:'2026-10-30T00:00:00Z',courses:[{id:'9397',name:'离散数学Ⅱ',term:'2026-2027-1',teachers:['教师'],sessions:['71990','72000']}]});
+const snapshotUrl='chrome-extension://fixture/legacy-session-index.json';
+test('legacy catalog uses local data only and retains explicit session ownership',async()=>{
+ const calls=[],api=new AutoSlidesIndex({snapshotUrl,fetcher:async(raw,options)=>{calls.push(raw);assert.equal(options.credentials,'omit');return json(snapshot());}});
+ assert.deepEqual((await api.terms()).terms,['2026-2027-1']);assert.equal((await api.search('离散')).rows[0].id,'9397');assert.deepEqual(await api.sessions('9397'),['71990','72000']);assert.deepEqual(calls,[snapshotUrl]);
 });
-test('403 HTML, unknown courses and malformed IDs are errors rather than empty results',async()=>{
- await assert.rejects(new AutoSlidesIndex({fetcher:async()=>new Response('<html>challenge</html>',{status:403})}).terms(),/403/);
- await assert.rejects(new AutoSlidesIndex({fetcher:async()=>json({error:'not-found'},404)}).sessions('9397'),/尚未收录/);
- await assert.rejects(new AutoSlidesIndex({fetcher:async()=>json({course:71990,sessions:[71990]})}).sessions('9397'),/格式/);
- await assert.rejects(new AutoSlidesIndex({fetcher:async()=>json({course:9397,sessions:['71990','https://evil.invalid/']})}).sessions('9397'),/格式/);
-});
-test('terms are discovered from the deployment; session IDs stay independent of course IDs',async()=>{
- const api=new AutoSlidesIndex({fetcher:async raw=>new URL(raw).pathname==='/api/terms'?json({updatedAt:1793000000000,terms:['2026-2027-1','2025-2026-2']}):json({course:9397,sessions:[72000,71990,71990]})});
- assert.deepEqual((await api.terms()).terms,['2026-2027-1','2025-2026-2']);assert.deepEqual(await api.sessions('9397'),['71990','72000']);
+test('missing catalogs direct users to import and never request an online index',async()=>{
+ const api=new AutoSlidesIndex({snapshotUrl:null,fetcher:()=>{throw Error('Unexpected network');}});
+ await assert.rejects(api.terms(),/导入旧版课次目录/);await assert.rejects(api.search('离散'),/导入旧版课次目录/);await assert.rejects(api.sessions('9397'),/导入旧版课次目录/);
 });
 function fixture({blocked=false,wrongCourse=false,videos=[301,302],listDenied=false}={}){
- const paths=[];const api=new LegacyYanheApi({hash:md5,fetcher:async(raw,options)=>{
+ const paths=[];const api=new LegacyYanheApi({hash:md5,snapshotUrl,fetcher:async(raw,options)=>{
   const u=new URL(raw);paths.push(u.pathname);
-  if(u.origin==='https://share.ruc.edu.kg'){assert.equal(options.headers.Authorization,undefined);assert.equal(options.credentials,'omit');return blocked?new Response('challenge',{status:403}):json({course:9397,sessions:[71990,72000]});}
+  if(raw===snapshotUrl){assert.equal(options.credentials,'omit');return blocked?new Response('',{status:404}):json(snapshot());}
   assert.equal(options.headers.Authorization,'Bearer fixture');assert.ok(!/\.(m3u8|mp4|flv)$/.test(u.pathname));
   const data=u.pathname==='/v1/course'?{id:9397,name_zh:'离散数学Ⅱ'}:u.pathname==='/v2/course/session/list'?[]:u.pathname==='/v1/course/session'?{id:Number(u.searchParams.get('session_id')),course_id:wrongCourse?71990:9397,video_ids:videos,title:'集合',started_at:'2026-09-07 08:00:00'}:{id:Number(u.searchParams.get('id')),course_id:0,session_id:0,main:'https://cvideo.yanhekt.cn/test.m3u8',duration:5};
   if(listDenied&&u.pathname==='/v2/course/session/list')return new Response('',{status:403});return json({code:0,data});
@@ -36,7 +31,7 @@ test('index fills missing sessions, then only the selected session and video are
  assert.equal(info.sessionReplays[1].id,'71990:302');
 });
 test('a known session remains usable when the partial index is unavailable',async()=>{
- const {api}=fixture({blocked:true});const course=await api.course('9397',undefined,{force:true,indexed:true,sessionId:'71990'});assert.match(course.indexWarning,/403/);assert.deepEqual(course.replays,[indexedSession('71990')]);assert.equal((await api.lecture('9397','71990:pending')).selection.id,'71990:301');
+ const {api}=fixture({blocked:true});const course=await api.course('9397',undefined,{force:true,indexed:true,sessionId:'71990'});assert.match(course.indexWarning,/导入旧版课次目录/);assert.deepEqual(course.replays,[indexedSession('71990')]);assert.equal((await api.lecture('9397','71990:pending')).selection.id,'71990:301');
 });
 test('a denied v2 listing is not cached as empty; the explicit session uses its authoritative metadata',async()=>{
  const {api,paths}=fixture({listDenied:true});const course=await api.course('9397',undefined,{force:true,indexed:true,sessionId:'71990'});assert.equal(course.replays[0].id,'71990:pending');assert.equal((await api.lecture('9397','71990:302')).selection.id,'71990:302');

@@ -1,4 +1,5 @@
-import {downloadAttachment,downloadStatus} from './remote-client.js';
+import {downloadAttachment,downloadStatus,cancelDownload} from './remote-client.js';
+import {attachmentJob} from './attachment-job.js';
 import {richContent} from './rich-content.js';
 import {MAX_UPLOAD_BYTES} from './lms-writer.js';
 
@@ -10,13 +11,12 @@ export function courseworkUi({root,lms,lexue,node,button,link,loading,empty,toas
  function open(title,wide=false){generation++;dialog.classList.toggle('task-dialog',wide);dialog.querySelector('h2').textContent=title;content.replaceChildren(loading());if(!dialog.open)dialog.showModal();return generation;}
  const current=g=>g===generation&&dialog.open;
  async function files(row){return row.source==='lexue'?lexue.resources(row.courseId,row.id):row.source==='lms'?lms.resources(row.courseId,row.id):row.attachments||[];}
- async function download(row,file,status){
+ async function download(row,file,status,signal){
   status.disabled=true;status.textContent='下载中…';
   try{
-   const {id}=await downloadAttachment({source:row.source,courseId:row.courseId,id:row.id,fileId:file.id,referenceId:file.referenceId,submissionId:row.submissionId,folder:row.courseTitle||'课程资料'});
-   for(;;){const [item]=await downloadStatus([id]);if(item.state==='complete'){status.textContent='已下载';break;}if(item.state==='interrupted')throw new Error('下载未完成');await new Promise(r=>setTimeout(r,1000));}
+   await attachmentJob({start:()=>downloadAttachment({source:row.source,courseId:row.courseId,id:row.id,fileId:file.id,referenceId:file.referenceId,submissionId:row.submissionId,folder:row.courseTitle||'课程资料'}),status:downloadStatus,cancel:cancelDownload},signal);status.textContent='已下载';
    return true;
-  }catch(e){status.textContent='重试下载';status.title=e.message;toast(e.message);return false;}
+  }catch(e){if(e.name==='AbortError'){status.textContent='已取消';return null;}status.textContent='重试下载';status.title=e.message;toast(e.message);return false;}
   finally{status.disabled=false;}
  }
  function attachment(row,file){const action=button('下载',()=>void download(row,file,action),'text-button',{disabled:file.download?null:'',title:file.download?'下载附件':'未开放下载'});
@@ -25,15 +25,15 @@ export function courseworkUi({root,lms,lexue,node,button,link,loading,empty,toas
  async function resources(row){const g=open(row.title);try{const data=row.source==='lexue'?await lexue.material(row.courseId,row.id):{attachments:await files(row)},list=data.attachments;if(!current(g))return;content.replaceChildren(...(data.description?[richContent(data.description)]:[]),...(list.length?list.map(f=>attachment(row,f)):data.description?[]:[empty('暂无附件')]),node('div',{class:'dialog-footer'},link('原站',row.url,'text-button')));}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void resources(row)),link('原站',row.url,'text-button')]));}}
  function allButton(rows,title){const action=button('全部下载',()=>void downloadAll(rows,title),'attachment-button',{'aria-label':'下载本课全部资料附件',disabled:rows.length?null:''});return action;}
  async function downloadAll(rows,title){
-  const g=open('下载资料');const queue=[],failures=[];const seen=new Set();let total=0,finished=0,failed=0,stopped=false;
-  const progress=node('p',{class:'download-progress',role:'status'},'正在整理附件…'),list=node('div'),cancel=button('停止',()=>{stopped=true;cancel.disabled=true;cancel.textContent='已停止';},'text-button');
+  const g=open('下载资料');const queue=[],failures=[];const seen=new Set(),cancellation=new AbortController();let total=0,finished=0,failed=0,stopped=false;
+  const progress=node('p',{class:'download-progress',role:'status'},'正在整理附件…'),list=node('div'),cancel=button('停止',()=>{stopped=true;cancellation.abort();cancel.disabled=true;cancel.textContent='正在停止…';},'text-button');
   content.replaceChildren(progress,list,node('div',{class:'dialog-footer'},cancel));
   for(const row of rows){if(!current(g))return;if(stopped)break;try{for(const file of await files(row)){const key=row.source+':'+(file.referenceId||file.id);if(seen.has(key)||!file.download)continue;seen.add(key);queue.push({row:{...row,courseTitle:title||row.courseTitle},file});}}catch(e){failures.push(row.title+'：'+e.message);}}
   if(!current(g))return;total=queue.length;
   for(const {row,file} of queue){if(!current(g)||stopped)break;const state=button('等待',()=>void download(row,file,state),'text-button'),item=node('div',{class:'attachment-row'},node('div',{class:'attachment-name'},file.name),state);list.append(item);
-   progress.textContent=`${finished+failed} / ${total}`;const ok=await download(row,file,state);ok?finished++:failed++;
+   progress.textContent=`${finished+failed} / ${total}`;const ok=await download(row,file,state,cancellation.signal);if(ok===true)finished++;else if(ok===false)failed++;
   }
-  if(current(g)){progress.textContent=`已下载 ${finished} / ${total}${failed?'，失败 '+failed:''}${stopped?' · 已停止':''}`;cancel.remove();if(!total&&!failures.length)progress.textContent='暂无可下载附件';for(const message of failures)list.append(node('p',{class:'inline-notice'},message));}
+  if(current(g)){progress.textContent=`已下载 ${finished} / ${total}${failed?'，失败 '+failed:''}${stopped?' · 已停止后续任务':''}`;cancel.remove();if(!total&&!failures.length)progress.textContent=stopped?'已停止':'暂无可下载附件';for(const message of failures)list.append(node('p',{class:'inline-notice'},message));}
  }
  async function task(row){const g=open(row.title,true);try{const data=await (row.source==='lexue'?lexue:lms).task(row.courseId,row.id);if(current(g))renderTask(row,data,g);}catch(e){if(current(g))content.replaceChildren(empty(e.message,[button('重试',()=>void task(row)),link('原站',row.url,'text-button')]));}}
  function renderTask(row,data,g){

@@ -17,7 +17,7 @@ test('a frozen or failed LMS tab falls back and is skipped for subsequent reads'
 test('an LMS page error does not prevent another logged-in page from serving the request',async()=>{
  const before=globalThis.chrome;
  try{
-  globalThis.chrome={tabs:{query:async()=>[{id:1},{id:2}],sendMessage:async id=>id===1?{ok:false,error:'old reader failed'}:{ok:true,data:{rows:[{id:'402',term:'2026-2027-1'}]}}}};
+  globalThis.chrome={tabs:{query:async()=>[{id:1},{id:2}],sendMessage:async (id,message)=>id===1?{ok:false,error:'old reader failed'}:message.type==='DESK_READER_PING'?{version:1,kind:'lms'}:{ok:true,data:{rows:[{id:'402',term:'2026-2027-1'}]}}}};
   const client=new LmsClient();client.fallback.read=async()=>{throw Error('fallback should not be needed');};
   assert.equal((await client.courses())[0].id,'402');assert.equal(client.tab,2);
  }finally{globalThis.chrome=before;}

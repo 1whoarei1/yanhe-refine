@@ -292,7 +292,7 @@ async function loadCourse(force=false) {
     const previous=await storage.get('lastLecture:'+courseKey());if(sequence!==state.sequence)return;
     const target = ref.liveId ? course.lives.find(row=>row.id==='live:'+ref.liveId) : ref.sessionId ? (/^\d{1,12}:\d{1,12}$/.test(previous||'')&&previous.split(':')[0]===ref.sessionId?{id:previous,title:'课次 '+ref.sessionId}:course.replays.find(row=>row.id.split(':')[0]===ref.sessionId)) : ref.subId ? [...course.replays,...course.lives || []].find(row => row.id === ref.subId) : course.replays.find(row=>row.id===previous);
     if (target && !target.mode) state.filter = 'replay';
-    message([course.liveWarning,course.indexWarning||(course.indexSource?'旧版课程索引仍在完善；点击课次后读取回放。':'')].filter(Boolean).join('；'),course.liveWarning?'error':''); renderLectures();
+    message([course.liveWarning,course.indexWarning||(course.indexSource?'点击课次读取回放。':'')].filter(Boolean).join('；'),course.liveWarning?'error':''); renderLectures();
     $('subtitle-list').append(textNode('p','暂无字幕','empty'));
     playbackStatus('等待选择课次'); await storage.set({ lastCourse: course.id, lastPlatform: ref.legacy ? 'legacy' : 'modern' });
     if (sequence === state.sequence && (ref.subId || target)) void selectLecture(target || {id:ref.subId,title:`课次 ${ref.subId}`});

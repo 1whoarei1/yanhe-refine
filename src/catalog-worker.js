@@ -1,12 +1,14 @@
 import {unzipSync,strFromU8} from 'fflate';
 import {SaxesParser} from 'saxes';
-import {importCatalog} from './watch/catalog-import.js';
+import {importCatalog,readImportedCatalog,validateCatalogImport} from './watch/catalog-import.js';
 import {normalizeCourse,searchCourses,relatedCourses,courseTermOptions,termLabel} from './catalog-core.js';
 let rows=[],db,index=new Map(),statsCache;
 const request=idb=>new Promise((resolve,reject)=>{idb.onsuccess=()=>resolve(idb.result);idb.onerror=()=>reject(idb.error);});
 async function database(){if(db)return db;const op=indexedDB.open('yanhe-desk',1);op.onupgradeneeded=()=>{op.result.createObjectStore('courses',{keyPath:'key'});op.result.createObjectStore('meta');};db=await request(op);return db;}
 async function transaction(mode,write){const d=await database(),tx=d.transaction(['courses','meta'],mode);return new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('保存失败'));try{write(tx);}catch(e){tx.abort();reject(e);}});}
-async function load(){const d=await database();rows=await request(d.transaction('courses').objectStore('courses').getAll());const corrected=[];rows=rows.map(row=>{const term=termLabel(row.term);if(term===row.term)return row;const clean={...row,term};corrected.push(clean);return clean;});if(corrected.length)await transaction('readwrite',tx=>{const store=tx.objectStore('courses');for(const row of corrected)store.put(row);});index=new Map(rows.map(r=>[r.key,r]));statsCache=null;return stats();}
+async function load(){const d=await database();rows=await request(d.transaction('courses').objectStore('courses').getAll());const corrected=[];rows=rows.map(row=>{const term=termLabel(row.term);if(term===row.term)return row;const clean={...row,term};corrected.push(clean);return clean;});if(corrected.length)await transaction('readwrite',tx=>{const store=tx.objectStore('courses');for(const row of corrected)store.put(row);});const snapshot=await readImportedCatalog('sessions');if(snapshot)rows=sessionRows(snapshot);index=new Map(rows.map(r=>[r.key,r]));statsCache=null;return stats();}
+// Session courses are derived from the committed snapshot, never stored in a second transaction.
+function sessionRows(data){const mapped=new Map(rows.filter(row=>!(row.platform==='legacy'&&row.indexSource==='autoslides')).map(row=>[row.key,row]));for(const row of data.courses){const course=normalizeCourse({platform:'legacy',id:row.id,title:row.name,teacher:row.teachers.join('、'),term:row.term,code:row.number,indexSource:'autoslides',indexSessionCount:row.sessions.length});mapped.set(course.key,course);}return [...mapped.values()];}
 function stats(){return statsCache ||= {count:rows.length,legacy:rows.filter(r=>r.platform==='legacy').length,modern:rows.filter(r=>r.platform==='modern').length,
  terms:courseTermOptions(rows),termsByPlatform:{modern:courseTermOptions(rows,'modern'),legacy:courseTermOptions(rows,'legacy')},colleges:[...new Set(rows.map(r=>r.college).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'))};}
 function xml(raw,onOpen,onText,onClose){const parser=new SaxesParser({xmlns:false});parser.on('opentag',onOpen||(()=>{}));parser.on('text',onText||(()=>{}));parser.on('closetag',tag=>onClose?.(tag.name));parser.write(raw).close();}
@@ -54,12 +56,13 @@ export async function perform(type,args={},progress=()=>{}){
   let records;
   if(args.name.toLowerCase().endsWith('.xlsx'))records=readXlsx(args.buffer,progress);
   else {const data=JSON.parse(new TextDecoder().decode(args.buffer));
-   if(data.format==='yanhekt-session-index/v1'){const imported=await importCatalog(data);records=data.courses.map(row=>normalizeCourse({platform:'legacy',id:row.id,title:row.name,teacher:row.teachers.join('、'),term:row.term,code:row.number,indexSource:'autoslides',indexSessionCount:row.sessions.length}));return {...await saveRecords(records),imported:imported.courses,importedSessions:imported.sessions};}
+   if(data.format==='yanhekt-session-index/v1'){const checked=validateCatalogImport(data),nextRows=sessionRows(checked.data),nextIndex=new Map(nextRows.map(row=>[row.key,row]));const imported=await importCatalog(data);rows=nextRows;index=nextIndex;statsCache=null;return {...stats(),imported:imported.courses,importedSessions:imported.sessions};}
    const list=Array.isArray(data)?data:data.courses||data.rows;if(!Array.isArray(list))throw new Error('没有找到课程列表');records=list.map(r=>normalizeCourse(r)).filter(Boolean);}
   if(!records.length)throw new Error('没有可导入的课程');return {...await saveRecords(records),imported:new Set(records.map(r=>r.key)).size};
  }
  throw new Error('未知操作');
 }
-let queue=Promise.resolve();
-export function catalogOperation(type,args={}){const next=queue.then(()=>perform(type,args));queue=next.catch(()=>{});return next;}
+let queue=Promise.resolve(),dirty=false;
+globalThis.chrome?.storage?.onChanged?.addListener((changes,area)=>{if(area==='local'&&changes['catalog:importRevision'])dirty=true;});
+export function catalogOperation(type,args={}){const next=queue.then(async()=>{if(dirty&&type!=='init'){dirty=false;try{await load();}catch(error){dirty=true;throw error;}}return perform(type,args);});queue=next.catch(()=>{});return next;}
 if(typeof WorkerGlobalScope!=='undefined'&&self instanceof WorkerGlobalScope&&typeof ServiceWorkerGlobalScope==='undefined')self.onmessage=({data})=>{queue=queue.then(async()=>{const {id,type,args={}}=data;try{const result=await perform(type,args,count=>self.postMessage({id,progress:count}));self.postMessage({id,result});}catch(e){self.postMessage({id,error:e.message||'操作失败'});}});};
