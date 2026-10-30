@@ -26,7 +26,7 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    data=json.loads(snapshot)
    assert data['format']=='yanhekt-session-index/v1' and data['source']['kind']=='self-collected'
    assert len(data['courses'])==data['coverage']['courses']
-   assert sum(len(row['sessions']) for row in data['courses'])==data['coverage']['sessions']
+   assert sum(len(row['sessions']) for row in data['courses'])==data['coverage'].get('exportedSessions',data['coverage']['sessions'])
   has_import_catalog='课程目录/课程目录.json' in names
   if not personal and '--with-catalog' in sys.argv:assert has_import_catalog
   if has_import_catalog:
@@ -46,7 +46,7 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    snapshot=z.read('课程目录/旧版课次目录.json');assert snapshot==(root/'local-data/release-session-index.json').read_bytes()
    data=json.loads(snapshot);assert data['format']=='yanhekt-session-index/v1' and data['source']['kind']=='self-collected'
    assert len(data['courses'])==data['coverage']['courses']
-   assert sum(len(row['sessions']) for row in data['courses'])==data['coverage']['sessions']
+   assert sum(len(row['sessions']) for row in data['courses'])==data['coverage'].get('exportedSessions',data['coverage']['sessions'])
   if personal:
    seed=z.read('private-catalog.json')
    assert hashlib.sha256(seed).hexdigest()==info['catalog']['sha256']

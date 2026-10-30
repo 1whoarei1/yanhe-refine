@@ -1,70 +1,36 @@
-# Yanhe Refine · 延河焕新
+# 延河焕新
 
-直接在延河课堂原站整合课程、直播、回放、资料和待办，支持新版与旧版课堂。
+在新版、旧版延河课堂中，一站查看课程、直播、回放、资料和待办。支持 Edge / Chrome。
 
-**当前正式版本：0.10.5** · Edge / Chrome Manifest V3
+[下载插件 0.10.5](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载最新旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/download/v0.10.5/legacy-session-index-20261030.json) · [更新记录](CHANGELOG.md)
 
-[下载正式版](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [上一正式版](https://github.com/1whoarei1/yanhe-refine/releases/tag/v0.10.0) · [独立回放助手](https://github.com/1whoarei1/yanhe-replay) · [接口参考](https://github.com/1whoarei1/yanhe-api-reference) · [更新记录](CHANGELOG.md)
+## 功能
 
-## 安装或更新
+- 搜索课程、教师或粘贴课程链接，查找往年回放。
+- 双画面观看；直播支持三画面，左侧主画面、右侧上下两路。声音来源单独选择。
+- 倍速、字幕、音量、网页全屏和屏幕全屏；侧栏、课次栏与字幕表可收起。
+- 汇总新旧乐学的资料与待办，按学期筛选；视频下载在独立标签页进行。
+- 签到模式显示最新缓存画面，不自动签到；可随时切回原站。
 
-1. 下载 Release 中的 `yanhe-refine-0.10.5.zip` 并解压到固定文件夹。
-2. 在 `edge://extensions` 或 `chrome://extensions` 开启开发者模式，选择「加载解压缩的扩展」，选中含 `manifest.json` 的文件夹。
-3. 打开 [新版课堂](https://aita.yanhekt.cn/) 或 [旧版课堂](https://www.yanhekt.cn/)，沿用原站登录状态。
-4. 更新已有安装时备份原目录、替换扩展文件，在扩展管理页重新加载，再刷新课堂页面。
+## 安装与更新
 
-**0.10.5 修复版**：补上原站截图中的 `2026-20271季学期` 格式，归一为 `2026-2027-1`；仅有关系 ID 时补读字典，旧标签页的空解析结果会由新读取器重读。默认只扫描当前学期，学期未识别时明确标注结果不完整。截图原样格式和 55 门模拟课程的自动回归已通过，当前真实账号的最终待办数量仍未复核。
+1. 下载 `yanhe-refine-0.10.5.zip`，解压到固定文件夹。
+2. 打开 `edge://extensions` 或 `chrome://extensions`，开启「开发者模式」，选择「加载解压缩的扩展」。
+3. 选择含 `manifest.json` 的文件夹，登录[新版课堂](https://aita.yanhekt.cn/)或[旧版课堂](https://www.yanhekt.cn/)即可使用。
 
-新乐学与旧乐学各自需要登录。在同一浏览器打开旧乐学登录入口完成 Moodle 登录后，返回课堂会重试失败的旧乐学连接；也可单独刷新旧乐学。只有用户对当前批次明确允许发布后，才推送或公开 Release。
+更新时替换原扩展文件，重新加载扩展，再刷新课堂页面。使用乐学资料与待办前，请分别登录新乐学和旧乐学。
 
-## 两份可导入目录
+## 导入课程目录
 
-ZIP 包的 `课程目录/` 中附带：
+在「设置 → 导入课程表」中分别导入：
 
-| 文件 | 用途 |
-| --- | --- |
-| `课程目录.json` | 新版课程名称、教师、学期和编号 |
-| `旧版课次目录.json` | 我们采集的旧版课程及其明确归属的 session 列表 |
-| `导入说明.txt` | 导入步骤、覆盖范围和快照时间 |
+- **新版**：压缩包内的 `课程目录/课程目录.json`，收录 **27,369 门课程**。
+- **旧版**：压缩包内的 `课程目录/旧版课次目录.json`，收录 **57,735 门课程、813,946 个课次**（2026-10-30 快照，持续采集中）。
 
-本次快照：新版 **27,369 门课程**；旧版 **31,990 门课程、376,228 个 session**。旧版快照取自服务器，客户端纽约时间为 2026-10-28 23:33:36 EDT（UTC `2026-10-29T03:33:36Z`），采集仍在继续，未收录不代表没有回放。更新目录时重新导入同类文件即可，浏览器会保留已导入目录。
+两份目录均随插件提供。更新旧版目录也可单独下载，重新导入即可，回放助手也可使用。
 
-旧版按原站返回的 course ID 聚合 session，课次编号可以不连续。课程、session 和 video 是不同编号；同号不能互相替代。目录不含登录信息、观看记录、成绩、作业或媒体地址，旧版 XLSX 表不分发。目录作为 Release 资产提供，不提交源码仓库。
+## 致谢
 
-在插件的「设置」→「导入课程表」中，依次选择两份 JSON。新版目录用于离线找课，旧版课次目录用于课程检索与课次归属；观看时仍由原站校验登录、媒体及权限。
+感谢 [bit-admin / Yanhekt-AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 提供旧版课次索引器，感谢 [yanhekit](https://github.com/windlandneko/yanhekit) 及下载工具作者提供协议参考。
 
-## 使用
-
-- 统一导航提供今天、课程、资料和待办，主侧栏、课次栏及字幕表可以分别隐藏。
-- 可粘贴新版课程/课次链接，或旧站 `course`、`session`、`live` 链接。旧站回放以 session 为目标，支持一节课的多个视频片段。
-- 课次页的「原站」和左下角「恢复原版」会记住原版模式；原站链接继续正常使用，需要时再点「返回焕新版」。
-- 视频底栏集中显示播放、进度、倍速、字幕、音量及全屏。双画面可看任意两路；直播三画面为左侧主画面、右侧上下两路。
-- 声音独立于画面，只播放一路，支持自动、屏幕、教室或学生来源。音量悬停显示滑块；字幕随实际画面定位并避开显示中的底栏。
-- 网页全屏与屏幕全屏均保留多画面。暂停、拖动、字幕偏移校准与音量统一控制。
-- 签到模式展示最新已缓存帧，声音保持连续；模式只控制画面，不提交点名或签到请求。
-- 「设置」中的直播平台切换按课程名、教师、学期及上课时间核对新旧站，多个候选由用户选择，分别使用两站自己的编号。
-- 标题栏保留下载视频入口，下载页在新标签打开；支持各画面、HLS/FLV/MP4、下载进度、取消和失败重试。
-- 普通文件作业可通过新乐学上传并提交，结果未知时先刷新确认；其它活动保留平台入口。资料、附件和已关联的新旧乐学课程保持独立来源；新乐学结构化学年/学期正确解析，未知学期不生成无效筛选项。
-
-浏览器分别记住两个域名的缩放比例；如显示大小不同，可在相应页面按 Ctrl+0 恢复 100%。
-
-## 开发与验证
-
-```sh
-npm ci
-npm run build
-npm test
-npm run test:browser:layout
-npm run test:browser:streams
-npm run test:browser:imports
-```
-
-浏览器回归使用隔离配置和合成媒体，不替代当前真实课堂的播放验收。导入测试有本地发布目录时使用实际两份 JSON，否则使用合成夹具。
-
-普通源码构建不含目录数据。将 Release 两份 JSON 分别放到 `local-data/release-catalog.json`、`local-data/release-session-index.json` 后，可运行 `python tools/package.py --with-imports` 生成同样的正式包。个人配置、测试快照和浏览器状态不进入 Git。
-
-## 来源与致谢
-
-公开感谢 **[bit-admin / Yanhekt-AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides)** 提供 session 索引实现、在线索引协议及旧站元数据研究。发布包中的旧版快照来自我们使用其开源索引器独立采集的数据，并非解密上游 Release。
-
-同时感谢 [yanhekit](https://github.com/windlandneko/yanhekit) 和原有下载实现提供的协议参考。第三方库、来源、许可证与修改范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目采用 MIT 许可证。
+[MIT 许可证](LICENSE) · [第三方声明](THIRD_PARTY_NOTICES.md) · [独立回放助手](https://github.com/1whoarei1/yanhe-replay) · [接口参考](https://github.com/1whoarei1/yanhe-api-reference)
