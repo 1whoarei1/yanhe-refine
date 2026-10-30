@@ -14,7 +14,7 @@
 
 ## 安装与更新
 
-1. 下载 `yanhe-refine-0.10.5.zip`，解压到固定文件夹。
+1. 下载插件压缩包，解压到固定文件夹。
 2. 打开 `edge://extensions` 或 `chrome://extensions`，开启「开发者模式」，选择「加载解压缩的扩展」。
 3. 选择含 `manifest.json` 的文件夹，登录[新版课堂](https://aita.yanhekt.cn/)或[旧版课堂](https://www.yanhekt.cn/)即可使用。
 
