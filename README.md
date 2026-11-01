@@ -2,7 +2,7 @@
 
 在新版、旧版延河课堂中，一站查看课程、直播、回放、资料和待办。支持 Edge / Chrome。
 
-[下载插件 1.0](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载最新旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
+[下载插件 1.0.1](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载最新旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
 
 ## 功能
 
@@ -26,7 +26,7 @@
 在「设置 → 导入课程表」中分别导入：
 
 - **新版**：压缩包内的 `课程目录/课程目录.json`，收录 **27,369 门课程**。
-- **旧版**：压缩包内的 `课程目录/旧版课次目录.json`，收录 **59,367 门课程、844,403 个课次**（2026-10-30 快照，持续采集中）。
+- **旧版**：压缩包内的 `课程目录/旧版课次目录.json`，收录 **59,602 门课程、853,644 个课次**（2026-10-30 快照，已完成 session 1–1,000,000 的扫描）。
 
 两份目录均随插件提供。更新旧版目录也可单独下载，重新导入即可，回放助手也可使用。
 

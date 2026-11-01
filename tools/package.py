@@ -58,11 +58,12 @@ if with_imports:
  assert snapshot['format']=='yanhekt-session-index/v1' and snapshot['source']['kind']=='self-collected'
  assert session_file.stat().st_size<=32*1024*1024
  shutil.copy2(session_file,folder/directory/'旧版课次目录.json');files.append(directory/'旧版课次目录.json')
+ collection_status='持续采集中' if snapshot.get('partial',True) else '本轮扫描已完成'
  instructions=f"""在「设置 → 导入课程表」中，分别导入本文件夹的两个 JSON。
 
 新版：课程目录.json（{len(catalog['courses']):,} 门课程）
 旧版：旧版课次目录.json（{len(snapshot['courses']):,} 门课程、{sum(len(c['sessions']) for c in snapshot['courses']):,} 个课次）
-旧版快照：{snapshot['generatedAt']}，持续采集中。
+旧版快照：{snapshot['generatedAt']}，{collection_status}。
 
 更新目录时重新导入即可。目录可离线检索，观看仍需登录原站。
 回放助手可在「全校课程 → 导入目录」中使用这两份文件。
