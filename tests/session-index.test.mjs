@@ -10,6 +10,8 @@ test('a failed snapshot read is retried instead of permanently caching the rejec
 test('local snapshot retains early terms and noncontiguous session ownership with independent course ids',async()=>{
  const index=new AutoSlidesIndex(options());assert.deepEqual((await index.terms()).terms,['2026-2027-1','2020-2021-2']);
  assert.deepEqual(await index.sessions('9397'),['71990','72000']);assert.deepEqual(await index.sessions('71990'),['916997']);
+ assert.equal((await index.owner('71990')).id,'9397');assert.equal((await index.course('71990')).name,'另一门课程');assert.equal(await index.owner('123456'),null);
+ const copy=await index.course('9397');copy.sessions.push('999');assert.deepEqual((await index.course('9397')).sessions,['71990','72000']);
  assert.equal((await index.search('何雨果',{term:'2020-2021-2'})).rows[0].id,'9397');
  assert.equal((await index.search('71990')).rows[0].id,'71990');
  await assert.rejects(index.sessions('72000'),/尚未收录/);

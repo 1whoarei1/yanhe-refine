@@ -27,7 +27,7 @@ try{
   if(url.hostname==='cbiz.yanhekt.cn'){
    if(path==='/v1/user')return json({code:0,data:{id:7,badge:0}});
    if(path==='/v1/course')return json({code:0,data:{id:sample.id,name_zh:sample.name,school_year:sample.term.slice(0,9),semester:Number(sample.term.at(-1)),professors:sample.teachers.map(name=>({name}))}});
-   if(path==='/v2/live/list')return json({code:0,data:{data:[]}});if(path==='/v2/course/session/list')return json({code:0,data:[]});
+   if(path==='/v2/live/list')return json({code:0,data:{data:[]}});if(path==='/v1/course/session/list')return json({code:0,data:[]});
    if(path==='/v1/course/session')return json({code:0,data:{id:Number(url.searchParams.get('session_id')),course_id:Number(sample.id),title:'尚无录像的课次',video_ids:[],started_at:'2026-01-01 08:00:00'}});
    throw Error('Unexpected old API '+path);
   }

@@ -28,12 +28,17 @@ export function legacySignedUrl(raw,token,hash,now = Math.floor(Date.now()/1000)
 }
 export function legacyReplays(sessions) {
   const rows = [];
-  for (const session of sessions || []) for (const [part,video] of (session.videos || []).entries()) {
+  for (const session of sessions || []) {
+   const videos=Array.isArray(session.videos)?session.videos:session.videos&&typeof session.videos==='object'?[session.videos]:[];
+   for (const [part,video] of videos.entries()) {
+    if(!video||!/^\d{1,12}$/.test(String(session.id))||!/^\d{1,12}$/.test(String(video.id)))continue;
     if (!video.main && !video.room && !video.vga) continue;
     const id = `${session.id}:${video.id}`;
     const date = String(session.started_at || '').slice(0,10);
-    rows.push({id,title:`${date}${session.title || ''}${session.videos.length > 1 ? `（片段${part+1}）` : ''}`,
-      start:Date.parse(String(session.started_at || '').replace(' ','T')) || 0,video});
+    const raw=String(session.started_at||'').replace(' ','T');
+    rows.push({id,title:`${date}${session.section_group_title || session.title || '课次 '+session.id}${videos.length > 1 ? `（片段${part+1}）` : ''}`,
+      start:raw?(Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(raw)?raw:raw+'+08:00')||0):0,video});
+   }
   }
   return rows.sort((a,b)=>a.start-b.start);
 }

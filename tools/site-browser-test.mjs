@@ -11,6 +11,7 @@ const fixture=resolve(root,'tests/fixtures');
 const futureDeadline=days=>new Date(Date.now()+days*86400000).toISOString();
 const output=join(root,'test-results'),testRoot=await mkdtemp(join(tmpdir(),'yanhe-refine-test-')),profile=join(testRoot,'profile'),testExt=join(testRoot,'extension');
 await cp(ext,testExt,{recursive:true});
+await rm(join(testExt,'legacy-session-index.json'),{force:true}); // Keep synthetic legacy metadata independent of an optional personal snapshot.
 const testCourses=[{id:102178,title:'计算机视觉',teacher:'裴明涛',term:'2026-2027-1',platform:'modern'},...Array.from({length:20},(_,i)=>({id:70000+i,title:'计算机视觉',teacher:'裴明涛',term:'2024-2025-1',platform:'modern'})),{id:60001,title:'计算机视觉',teacher:'裴明涛',term:'2023-2024-1',platform:'legacy'},{id:73694,title:'计算机视觉',teacher:'张老师',term:'2025-2026-1',platform:'legacy'},{id:73694,title:'计算机视觉',teacher:'裴明涛',term:'2025-2026-2',platform:'modern'}];
 testCourses.push(...Array.from({length:45},(_,i)=>({id:85000+i,title:'分页课程',teacher:'分页老师',term:'2024-2025-1',platform:i%2?'modern':'legacy'})));
 const seed=JSON.stringify({courses:testCourses});await writeFile(join(testExt,'private-catalog.json'),seed);await writeFile(join(testExt,'build-info.json'),JSON.stringify({version:JSON.parse(await readFile(join(ext,'manifest.json'),'utf8')).version,catalog:{count:testCourses.length,sha256:createHash('sha256').update(seed).digest('hex')}}));
@@ -98,7 +99,7 @@ try{
     path==='/v2/course/private/list'?{data:[{id:71988,name_zh:'（英）纳米材料与物理',professors:[{name:'张教授'}],school_year:'2024-2025',semester:1}],last_page:1,total:1}:
     path==='/v1/course/session'?{id:Number(sessionId),course_id:sessionCourse}:
     path==='/v1/course'?{id:Number(u.searchParams.get('id')),name_zh:identities[courseId]?.[0]||'（英）纳米材料与物理',professors:[{name:identities[courseId]?.[1]||'张教授'}],school_year:'2024-2025',semester:1}:
-    path==='/v2/course/session/list'?sessionRows:path==='/v1/video/subtitle/list'?[]:undefined;
+    path==='/v1/course/session/list'?sessionRows:path==='/v1/video/subtitle/list'?[]:undefined;
    if(data!==undefined)return json({code:0,data});
   }
   if(u.hostname==='aita.yanhekt.cn'){

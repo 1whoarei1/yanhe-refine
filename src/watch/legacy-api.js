@@ -1,11 +1,14 @@
 import { YanheApi } from './api.js';
 import { mediaUrl } from './core.js';
 import {AutoSlidesIndex,indexedSession} from './autoslides-index.js';
-import { LEGACY_API,LEGACY_ORIGIN,legacyHeaders,legacyToken,legacySignedUrl,legacyReplays,legacyStreams,legacyLive,legacyLiveSignedUrl,parseLegacyCaptions } from './legacy-core.js';
+import { LEGACY_API,LEGACY_ORIGIN,legacyHeaders,legacyToken,legacyReplays,legacyStreams,legacyLive,legacyLiveSignedUrl,parseLegacyCaptions } from './legacy-core.js';
+
+const validId=value=>/^[1-9]\d{0,11}$/.test(String(value??''));
+const publicReplays=rows=>rows.map(({video,...row})=>row);
 
 export class LegacyYanheApi extends YanheApi {
-  constructor(options={}) { super(options); this.videoToken=null;this.videoExpiry=0;this.videoFlight=null;this.lectures=new Map();this.index=new AutoSlidesIndex(options); }
-  reset() { super.reset();this.videoToken=null;this.videoExpiry=0; }
+  constructor(options={}) { super(options); this.videoToken=null;this.videoExpiry=0;this.videoFlight=null;this.lectures=new Map();this.sessionLists=new Map();this.index=options.index||new AutoSlidesIndex(options); }
+  reset() { super.reset();this.videoToken=null;this.videoExpiry=0;this.lectures?.clear();this.sessionLists?.clear(); }
   async json(path,params={}, {signal}={}) {
     const url=new URL(path,LEGACY_API);
     for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
@@ -13,7 +16,7 @@ export class LegacyYanheApi extends YanheApi {
       signal:signal?AbortSignal.any([signal,AbortSignal.timeout(18000)]):AbortSignal.timeout(18000)});
     if(!response.ok)throw new Error(`旧版课堂返回 HTTP ${response.status}。`);
     const body=await response.json();
-    if(Number(body.code)!==0)throw new Error(`旧版课堂请求失败（${Number(body.code)||'未知状态'}）。`);
+    if(![0,'0'].includes(body.code)){const error=new Error(Number(body.code)===12121028?'旧版课程已过期，当前接口未提供此资源。':`旧版课堂请求失败（${Number(body.code)||'未知状态'}）。`);error.code=Number(body.code);throw error;}
     return body;
   }
   async authenticate({signal,force=false}={}) {
@@ -46,6 +49,10 @@ export class LegacyYanheApi extends YanheApi {
   async resolve(ref,signal) {
     if (ref.id) return ref;
     await this.authenticate({signal});
+    if(ref.sessionId){
+      const owner=await this.index.owner?.(ref.sessionId,signal);
+      if(owner)return {id:String(owner.id),sessionId:String(ref.sessionId),legacy:true};
+    }
     const {data}=ref.liveId
       ? await this.json('/v1/live',{id:ref.liveId,with_session:true,with_course:true},{signal})
       : await this.json('/v1/course/session',{session_id:ref.sessionId,with_video:true},{signal});
@@ -64,21 +71,54 @@ export class LegacyYanheApi extends YanheApi {
     const info=legacyLive(data);
     return {id:ref.id,legacy:true,title:String(data.course?.name_zh||data.title||'旧版直播'),teacher:(data.course?.professors||[]).map(row=>row.name).filter(Boolean).join('、'),term:[data.course?.school_year,data.course?.semester].filter(Boolean).join('-'),replays:[],lives:[{id:'live:'+ref.liveId,title:info.title,start:info.start,mode:info.mode}]};
   }
+  async courseSessions(id,signal,{force=false}={}){
+    if(!validId(id))throw new Error('旧版课程编号无效。');
+    const scope=String(this.profile?.id),key=scope+':'+id,saved=this.sessionLists.get(key);
+    if(!force&&saved&&Date.now()-saved.at<120000){signal?.throwIfAborted();return saved;}
+    if(force)this.sessionLists.delete(key);
+    const sessions=[],seen=new Set();let complete=false;
+    for(let page=1;page<=100;page++){
+      const {data}=await this.json('/v1/course/session/list',{course_id:id,order_type:'asc',page,page_size:100},{signal});
+      const batch=Array.isArray(data)?data:data?.data;
+      if(!Array.isArray(batch))throw new Error('旧站返回了无效的 v1 课次列表。');
+      for(const row of batch){
+        if(!row||!validId(row.id)||seen.has(String(row.id)))throw new Error('旧站 v1 课次分页重复或编号无效。');
+        const parents=[row.course_id,row.course?.id].filter(value=>value!=null&&value!==0&&value!=='0');
+        if(parents.some(value=>!validId(value)||String(value)!==String(id)))throw new Error('旧站 v1 课次的所属课程不一致。');
+        if(row.videos!=null&&(!Array.isArray(row.videos)&&typeof row.videos!=='object'||Array.isArray(row.videos)&&row.videos.length>100))throw new Error('旧站 v1 视频片段列表无效。');
+        seen.add(String(row.id));sessions.push(row);
+      }
+      if(batch.length<100||page>=Number(data?.last_page)||Number(data?.total)>0&&sessions.length>=Number(data.total)){complete=true;break;}
+    }
+    if(!complete)throw new Error('旧版课次超过分页限制，请在原站查看。');
+    if(String(this.profile?.id)!==scope)throw new Error('旧站账号已切换，请重新读取课程。');
+    const replays=legacyReplays(sessions),parts=new Set();
+    for(const row of replays){if(parts.has(row.id))throw new Error('旧站返回了重复的视频片段。');parts.add(row.id);}
+    const value={sessions,replays,at:Date.now()};signal?.throwIfAborted();
+    this.sessionLists.delete(key);this.sessionLists.set(key,value);
+    while(this.sessionLists.size>24)this.sessionLists.delete(this.sessionLists.keys().next().value);
+    return value;
+  }
+  async courseMetadata(id,sessions,signal){
+    let local;try{local=await this.index.course?.(id,signal);}catch{signal?.throwIfAborted();}
+    if(local)return {id:String(id),legacy:true,title:local.name,teacher:local.teachers.join('、'),term:local.term,code:local.number,college:''};
+    try{
+      const {data}=await this.json('/v1/course',{id,with_professor_badges:true},{signal});
+      if(String(data?.id)!==String(id))throw new Error('旧站返回的课程归属不一致。');
+      return {id:String(id),legacy:true,title:String(data.name_zh||'旧版课程 '+id),teacher:(data.professors||[]).map(row=>row.name).filter(Boolean).join('、'),term:[data.school_year,data.semester].filter(Boolean).join('-')};
+    }catch(error){
+      signal?.throwIfAborted();
+      const term=String(sessions[0]?.number||'').match(/^(\d{4})(\d{4})([12])/);
+      return {id:String(id),legacy:true,title:'旧版课程 '+id,teacher:'',term:term?`${term[1]}-${term[2]}-${term[3]}`:''};
+    }
+  }
   async course(id,signal,options={}) {
     await this.authenticate({signal});
-    const result=await this.replayCache.read('legacy',id,String(this.profile.id),async()=>{
-    const [course,sessions]=await Promise.all([this.json('/v1/course',{id,with_professor_badges:true},{signal}),this.json('/v2/course/session/list',{course_id:id},{signal})]);
-    if(String(course.data?.id)!==String(id))throw new Error('旧版课堂未找到这门课。');
-    if(!Array.isArray(sessions.data))throw new Error('旧站返回了无效的课次列表。');
-    const rows=legacyReplays(sessions.data);this.lectures=new Map(rows.map(row=>[row.id,row.video]));
-    return {id,legacy:true,title:String(course.data.name_zh||'旧版课程'),teacher:(course.data.professors||[]).map(row=>row.name).filter(Boolean).join('、'),
-      term:[course.data.school_year,course.data.semester].filter(Boolean).join('-'),replays:rows.map(({video,...row})=>row)};
-    },{...options,signal}).catch(async error=>{
-      signal?.throwIfAborted();if(!options.indexed&&!options.sessionId)throw error;
-      // A failed v2 listing must not be cached as an authoritative empty course.
-      const {data}=await this.json('/v1/course',{id,with_professor_badges:true},{signal});if(String(data?.id)!==String(id))throw error;
-      return {id,legacy:true,title:String(data.name_zh||'旧版课程'),teacher:(data.professors||[]).map(r=>r.name).filter(Boolean).join('、'),term:[data.school_year,data.semester].filter(Boolean).join('-'),replays:[]};
-    });
+    // The v1 cache namespace cannot reuse replay lists produced by the old v2 path.
+    const result=await this.replayCache.read('legacy-v1',id,String(this.profile.id),async()=>{
+      const {sessions,replays}=await this.courseSessions(id,signal,options);
+      return {...await this.courseMetadata(id,sessions,signal),replays:publicReplays(replays)};
+    },{...options,signal});
     const replays=[...result.replays];let indexWarning='';
     if(options.indexed){
       try{const ids=await this.index.sessions(id,signal,{force:options.force});for(const sid of ids)if(!replays.some(r=>r.id.split(':')[0]===sid))replays.push(indexedSession(sid));}
@@ -90,9 +130,7 @@ export class LegacyYanheApi extends YanheApi {
     return {...result,replays,lives,liveWarning,...(options.indexed?{indexSource:'autoslides',indexWarning}:{} )};
   }
   async describeCourse(id,signal){
-    await this.authenticate({signal});const {data}=await this.json('/v1/course',{id,with_professor_badges:true},{signal});
-    if(String(data?.id)!==String(id))throw new Error('旧站返回的课程归属不一致');
-    return {id:String(id),legacy:true,title:String(data.name_zh||''),teacher:(data.professors||[]).map(row=>row.name).filter(Boolean).join('、'),term:[data.school_year,data.semester].filter(Boolean).join('-')};
+    await this.authenticate({signal});return this.courseMetadata(id,[],signal);
   }
   async liveList(id,signal){
     const {data}=await this.json('/v2/live/list',{source_id:id,page:1,page_size:100},{signal});
@@ -101,25 +139,19 @@ export class LegacyYanheApi extends YanheApi {
   }
   async sessionLecture(courseId,subId,signal){
     const match=String(subId).match(/^([1-9]\d{0,11}):(pending|[1-9]\d{0,11})$/);if(!match)throw new Error('旧版课次编号无效。');
-    const {data}=await this.json('/v1/course/session',{session_id:match[1],with_video:true},{signal});
-    const courseIds=[data?.course_id,data?.course?.id].filter(x=>/^[1-9]\d{0,11}$/.test(String(x??''))).map(String);
-    if(String(data?.id)!==match[1]||!courseIds.length||courseIds.some(x=>x!==String(courseId)))throw new Error('此课次的所属课程不一致，请使用原站 session 链接核对。');
-    if(!Array.isArray(data.video_ids)||data.video_ids.length>100||!data.video_ids.every(x=>/^[1-9]\d{0,11}$/.test(String(x))))throw new Error('旧站未返回有效的视频片段列表。');
-    const ids=[...new Set(data.video_ids.map(String))];if(!ids.length)throw new Error('此课次暂未提供回放，索引记录不保证已有视频。');
-    const videoId=match[2]==='pending'?ids[0]:match[2];if(!ids.includes(videoId))throw new Error('此视频不属于所选课次，请重新选择片段。');
-    const {data:video}=await this.json('/v1/video',{id:videoId},{signal});if(String(video?.id)!==videoId)throw new Error('旧站返回的视频编号不一致。');
-    const raw=String(data.started_at||'').replace(' ','T'),start=raw?(Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(raw)?raw:raw+'+08:00')||0):0;
-    const sessionReplays=ids.map((vid,i)=>({id:match[1]+':'+vid,title:[String(data.started_at||'').slice(0,10),String(data.title||'课次 '+match[1])].filter(Boolean).join(' ')+(ids.length>1?`（片段${i+1}）`:''),start}));
-    this.lectures.set(match[1]+':'+videoId,video);
-    return {...legacyStreams(video),title:sessionReplays.find(r=>r.id===match[1]+':'+videoId).title,selection:sessionReplays.find(r=>r.id===match[1]+':'+videoId),sessionReplays};
+    const {sessions,replays}=await this.courseSessions(courseId,signal),session=sessions.find(row=>String(row.id)===match[1]);
+    const parts=replays.filter(row=>row.id.split(':')[0]===match[1]);
+    if(!session||!parts.length)throw new Error('此课次暂未提供可读取的回放，索引记录不保证已有视频。');
+    const selected=match[2]==='pending'?parts[0]:parts.find(row=>row.id===subId);
+    if(!selected)throw new Error('此视频不属于所选课次，请重新选择片段。');
+    this.lectures.set(selected.id,selected.video);
+    while(this.lectures.size>32)this.lectures.delete(this.lectures.keys().next().value);
+    return {...legacyStreams(selected.video),title:selected.title,selection:publicReplays([selected])[0],sessionReplays:publicReplays(parts)};
   }
   async lecture(courseId,subId,signal) {
     await this.authenticate({signal});
     if(/^live:\d{1,12}$/.test(subId)){const {data}=await this.json('/v1/live',{id:subId.slice(5),with_session:true,with_course:true},{signal});if(!data||String(data.course_id||data.course?.id)!==String(courseId))throw new Error('直播课程信息不一致');return legacyLive(data);}
-    if(String(subId).endsWith(':pending'))return this.sessionLecture(courseId,subId,signal);
-    if(!this.lectures.has(subId)){try{const {data}=await this.json('/v2/course/session/list',{course_id:courseId},{signal});if(Array.isArray(data))this.lectures=new Map(legacyReplays(data).map(row=>[row.id,row.video]));}catch(error){signal?.throwIfAborted();return this.sessionLecture(courseId,subId,signal);}}
-    const video=this.lectures.get(subId);
-    if(!video)return this.sessionLecture(courseId,subId,signal);return legacyStreams(video);
+    return this.sessionLecture(courseId,subId,signal);
   }
   async subtitles(subId,signal) {
     const video=this.lectures.get(subId);if(!video)return [];

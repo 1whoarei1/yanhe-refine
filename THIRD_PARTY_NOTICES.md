@@ -10,6 +10,10 @@ Yanhe Refine's own code is MIT licensed. Bundled dependencies retain their licen
 
 Thank you to the authors and maintainers for publishing their research and tools.
 
+### Legacy archive playback reference
+
+Thanks to [mmck111 / yanhekt-player](https://github.com/mmck111/yanhekt-player), revision `ab4b3be500f27d8b8e434d3b18153bc5a877b232`, for documenting the v1 course/session list as a source of embedded recording metadata when old course detail and video endpoints report expiry. This plugin independently implements that HTTP behavior; no Go implementation, executable or course catalogue from that project is bundled.
+
 ## Runtime components
 
 | Component | Version | Purpose | Included license |

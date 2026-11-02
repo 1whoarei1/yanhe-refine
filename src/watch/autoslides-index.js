@@ -6,6 +6,8 @@ export class AutoSlidesIndex {
  async terms(signal){const data=await this.snapshot.terms(signal);if(!data)throw missing();return data;}
  async search(query='',options={}){const data=await this.snapshot.search(query,options);if(!data)throw missing();return data;}
  async sessions(courseId,signal){const data=await this.snapshot.sessions(courseId,signal);if(!data)throw missing();return data;}
+ async course(courseId,signal){return this.snapshot.course(courseId,signal);}
+ async owner(sessionId,signal){return this.snapshot.owner(sessionId,signal);}
 }
 
 // A pending row is a session, never a guessed video ID. Media is resolved only on selection.
