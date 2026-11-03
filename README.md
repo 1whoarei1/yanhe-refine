@@ -15,6 +15,27 @@
 - 签到模式显示最新缓存画面，不自动签到；可随时切回原站。
 - 设置中可检查四个平台的连接状态、检查插件更新，访问 AutoSlides 与 BITShare。
 
+## 界面预览
+
+![今日概览：课程安排、继续学习与近期作业](docs/screenshots/today.png)
+
+<details>
+<summary>查看更多：回放、资料与待办</summary>
+
+**回放与字幕**
+
+![课程回放与字幕](docs/screenshots/replay.png)
+
+**课程资料**
+
+![课程资料与任务](docs/screenshots/materials.png)
+
+**待办汇总**
+
+![新旧乐学待办汇总](docs/screenshots/tasks.png)
+
+</details>
+
 ## 安装与更新
 
 1. 下载插件压缩包，解压到固定文件夹。
