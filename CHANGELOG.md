@@ -1,5 +1,9 @@
 # 版本记录
 
+## 1.10.1 · 2026-11-04
+
+- 修复仓库迁移后检查更新失败；更新下载、项目入口和截图链接。
+
 ## 1.10 · 2026-11-04
 
 **推荐更新。**
@@ -119,4 +123,4 @@
 
 ## 0.9.3
 
-此前正式版本与资产见 [GitHub Releases](https://github.com/1whoarei1/yanhe-refine/releases)。
+此前正式版本与资产见 [GitHub Releases](https://github.com/bitoolkit/yanhe-refine/releases)。

@@ -14,6 +14,7 @@ import {CourseworkCache} from './coursework-cache.js';
 import {connectionStatus} from './connection-status.js';
 import {formatDeadline} from './deadline-display.js';
 import {taskStatus,pendingTask} from './task-status.js';
+import {RELEASE_REPO,RELEASE_PAGE} from './update-check.js';
 
 export function startDesk({root=document,currentRoute=()=>location.hash.slice(1)||'/today',navigate,replaceRoute,hrefForRoute=value=>value,site=false}={}){
 const $=id=>root.querySelector('#'+id),main=$('content');
@@ -302,9 +303,9 @@ async function settingsPage(epoch){
  const connections=node('section',{class:'setting-row connection-setting','aria-labelledby':'connection-heading'},node('h3',{id:'connection-heading'},'连接'),node('div',{class:'connection-tools'},node('div',{id:'connection-status',class:'connection-grid'},connectionEntries.map(({entry})=>entry)),checkConnections));
  updateConnections();
  const updateStatus=node('span',{id:'update-status',role:'status'},'当前版本 '+state.version+' · 尚未检查');
- const releaseLink=link('发布页','https://github.com/1whoarei1/yanhe-refine/releases/latest','button-link');releaseLink.hidden=true;
+ const releaseLink=link('发布页',RELEASE_PAGE,'button-link');releaseLink.hidden=true;
  const checkUpdate=button('检查更新',async()=>{
-  checkUpdate.disabled=true;updateStatus.textContent='正在检查更新…';releaseLink.hidden=true;releaseLink.href='https://github.com/1whoarei1/yanhe-refine/releases/latest';releaseLink.textContent='发布页';
+  checkUpdate.disabled=true;updateStatus.textContent='正在检查更新…';releaseLink.hidden=true;releaseLink.href=RELEASE_PAGE;releaseLink.textContent='发布页';
   try{const result=await checkPluginUpdate();if(epoch!==state.epoch)return;
    updateStatus.textContent=result.available?'发现新版本 '+result.latestVersion+'（当前 '+result.currentVersion+'）':result.ahead?'当前版本高于最新发布版 '+result.latestVersion:'未发现新版本（最新发布 '+result.latestVersion+'）';
    if(result.available){releaseLink.href=result.downloadUrl||result.releaseUrl;releaseLink.textContent=result.downloadUrl?'下载新版':'查看新版';releaseLink.hidden=false;}
@@ -315,7 +316,7 @@ async function settingsPage(epoch){
   setting('学习记录','播放进度、字幕校准与收藏',[button('导出',()=>void exportRecords()),button('导入',()=>records.click()),records]),
   connections,
   setting('时间','课表与截止时间使用北京时间',[]),
-  setting('延河焕新',updateStatus,[checkUpdate,link('项目仓库','https://github.com/1whoarei1/yanhe-refine','button-link'),releaseLink]),
+  setting('延河焕新',updateStatus,[checkUpdate,link('项目仓库',RELEASE_REPO,'button-link'),releaseLink]),
   setting('友情链接','课程工具与资料分享',[link('Yanhekt-AutoSlides','https://github.com/bit-admin/Yanhekt-AutoSlides','button-link'),link('BITShare · 资料分享站','https://bitshare.com.cn/','button-link')]),
   node('details',{},node('summary',{},'诊断'),node('pre',{},state.diagnostics.length?state.diagnostics.join('\n'):'暂无错误')));
  setPage(epoch,heading('设置',''),section);

@@ -2,9 +2,9 @@
 
 在新版、旧版延河课堂中，一站查看课程、直播、回放、资料和待办。支持 Edge / Chrome。
 
-[下载插件 1.10](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
+[下载插件 1.10.1](https://github.com/bitoolkit/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/bitoolkit/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
 
-**1.10 推荐更新。** 课程目录免导入，播放设置更简洁，改善作业读取、内存占用和滚动体验。
+**1.10.1 推荐更新。** 修复仓库迁移后的更新检查与下载链接。旧版用户请手动更新一次。
 
 ## 功能
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {compareVersions,releaseUpdate,checkForUpdate,RELEASE_API,RELEASE_REPO} from '../src/update-check.js';
+import {compareVersions,releaseUpdate,checkForUpdate,RELEASE_API,RELEASE_REPO,RELEASE_PAGE} from '../src/update-check.js';
 const release=(tag='v0.10.6')=>({tag_name:tag,draft:false,prerelease:false,assets:[]});
 const asset=(name,updated_at='2026-10-30T10:00:00Z')=>({name,state:'uploaded',updated_at,browser_download_url:RELEASE_REPO+'/releases/download/v0.10.6/'+name});
 test('release comparisons use numeric components and recognize local versions ahead of the published release',()=>{
@@ -16,6 +16,21 @@ test('download choices stay inside the correct repository, release and version; 
 });
 test('update checks fetch only public release metadata with no credentials or classroom information',async()=>{
  const result=await checkForUpdate('0.10.5',{fetcher:async(url,options)=>{assert.equal(url,RELEASE_API);assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');assert.equal(options.referrerPolicy,'no-referrer');assert.equal(options.headers.Authorization,undefined);assert.equal(options.body,undefined);return Response.json(release());}});assert.equal(result.available,true);
+});
+
+test('the transferred repository is requested directly and its canonical organization assets remain downloadable',async()=>{
+ assert.equal(RELEASE_REPO,'https://github.com/bitoolkit/yanhe-refine');
+ assert.equal(RELEASE_PAGE,'https://github.com/bitoolkit/yanhe-refine/releases/latest');
+ const name='yanhe-refine-1.10.0.zip',download='https://github.com/bitoolkit/yanhe-refine/releases/download/v1.10.0/'+name;
+ const data={...release('v1.10.0'),assets:[{name,state:'uploaded',browser_download_url:download}]};
+ const fetcher=async(url,options)=>{
+  // The previous owner URL now redirects; redirect:error must not need to follow it.
+  assert.equal(url,'https://api.github.com/repos/bitoolkit/yanhe-refine/releases/latest');assert.equal(options.redirect,'error');return Response.json(data);
+ };
+ const result=await checkForUpdate('1.0.2',{fetcher});assert.equal(result.available,true);assert.equal(result.downloadUrl,download);
+ assert.equal((await checkForUpdate('1.10.0',{fetcher})).available,false);
+ const stale={...data,assets:[{...data.assets[0],browser_download_url:download.replace('bitoolkit/','1whoarei1/')}]};
+ assert.equal(releaseUpdate(stale,'1.0.2').downloadUrl,null);
 });
 test('network, rate-limit and invalid responses remain retryable failures rather than claiming no update',async()=>{
  for(const [response,message]of [[new Response('',{status:403}),/受限/],[new Response('',{status:429}),/受限/],[new Response('',{status:404}),/正式发布/],[new Response('<html>'),/无法识别/]])await assert.rejects(checkForUpdate('0.10.5',{fetcher:async()=>response}),message);

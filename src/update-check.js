@@ -1,5 +1,7 @@
-export const RELEASE_REPO='https://github.com/1whoarei1/yanhe-refine';
-export const RELEASE_API='https://api.github.com/repos/1whoarei1/yanhe-refine/releases/latest';
+const repository='bitoolkit/yanhe-refine';
+export const RELEASE_REPO='https://github.com/'+repository;
+export const RELEASE_PAGE=RELEASE_REPO+'/releases/latest';
+export const RELEASE_API='https://api.github.com/repos/'+repository+'/releases/latest';
 const version=value=>typeof value==='string'&&/^v?\d{1,5}(?:\.\d{1,5}){1,3}$/.test(value)?value.replace(/^v/,''):null;
 export function compareVersions(a,b){
  const left=version(a),right=version(b);if(!left||!right)throw new Error('版本号无法识别，请打开发布页查看。');

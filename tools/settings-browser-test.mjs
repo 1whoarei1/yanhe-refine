@@ -32,11 +32,11 @@ try{
    throw Error('Unexpected old LMS path '+url.pathname);
   }
   if(url.hostname==='api.github.com'){
-   assert.equal(url.pathname,'/repos/1whoarei1/yanhe-refine/releases/latest');assert.equal(request.headers().authorization,undefined);assert.equal(request.headers().cookie,undefined);checks++;
+   assert.equal(url.pathname,'/repos/bitoolkit/yanhe-refine/releases/latest');assert.equal(request.headers().authorization,undefined);assert.equal(request.headers().cookie,undefined);checks++;
    if(phase==='offline')return route.abort();if(phase==='limited')return route.fulfill({status:403,body:'{}'});
    if(phase==='new')await new Promise(resolve=>releasePending=resolve);
    const version=phase==='same'?manifest.version:nextVersion,name='yanhe-refine-'+version+'-20261030.zip';
-   return route.fulfill({contentType:'application/json',body:JSON.stringify({tag_name:'v'+version,draft:false,prerelease:false,assets:[{name,state:'uploaded',browser_download_url:'https://github.com/1whoarei1/yanhe-refine/releases/download/v'+version+'/'+name}]})});
+   return route.fulfill({contentType:'application/json',body:JSON.stringify({tag_name:'v'+version,draft:false,prerelease:false,assets:[{name,state:'uploaded',browser_download_url:'https://github.com/bitoolkit/yanhe-refine/releases/download/v'+version+'/'+name}]})});
   }
   assert.notEqual(url.hostname,'share.ruc.edu.kg');
   return route.fulfill({contentType:'text/html',body:'<!doctype html><html><body>Native fixture</body></html>'});
@@ -44,18 +44,18 @@ try{
  page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));await page.goto('https://aita.yanhekt.cn/personal/?yh_view=settings');
  const check=page.getByRole('button',{name:'检查更新',exact:true});await check.waitFor();assert.equal(checks,0);
  assert.equal(await page.getByRole('heading',{name:'延河焕新',exact:true}).count(),1);assert.equal(await page.getByRole('heading',{name:'插件更新',exact:true}).count(),0);
- const project=page.getByRole('link',{name:'项目仓库',exact:true});assert.equal(await project.count(),1);assert.equal(await project.getAttribute('href'),'https://github.com/1whoarei1/yanhe-refine');assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).count(),0);
+ const project=page.getByRole('link',{name:'项目仓库',exact:true});assert.equal(await project.count(),1);assert.equal(await project.getAttribute('href'),'https://github.com/bitoolkit/yanhe-refine');assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).count(),0);
  const auto=page.getByRole('link',{name:'Yanhekt-AutoSlides',exact:true}),share=page.getByRole('link',{name:'BITShare · 资料分享站',exact:true});
  assert.equal(await auto.getAttribute('href'),'https://github.com/bit-admin/Yanhekt-AutoSlides');assert.equal(await share.getAttribute('href'),'https://bitshare.com.cn/');assert.equal(await auto.getAttribute('target'),'_blank');assert.equal(await share.getAttribute('target'),'_blank');
  report.checks.push('settings show both requested friend links without requesting either site automatically');
  await check.click();await page.locator('#update-status').filter({hasText:'正在检查更新'}).waitFor();assert.equal(await check.isDisabled(),true);
  await page.waitForTimeout(100);assert.equal(typeof releasePending,'function');releasePending();await page.locator('#update-status').filter({hasText:'发现新版本 '+nextVersion}).waitFor();
- assert.equal(await page.getByRole('link',{name:'下载新版',exact:true}).getAttribute('href'),`https://github.com/1whoarei1/yanhe-refine/releases/download/v${nextVersion}/yanhe-refine-${nextVersion}-20261030.zip`);assert.equal(checks,1);
+ assert.equal(await page.getByRole('link',{name:'下载新版',exact:true}).getAttribute('href'),`https://github.com/bitoolkit/yanhe-refine/releases/download/v${nextVersion}/yanhe-refine-${nextVersion}-20261030.zip`);assert.equal(checks,1);
  report.checks.push('one click checks the fixed public release endpoint, disables duplicate clicks and offers the matching package');
  phase='same';await check.click();await page.locator('#update-status').filter({hasText:'未发现新版本'}).waitFor();assert.equal(await page.getByRole('link',{name:'下载新版',exact:true}).count(),0);assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).count(),0);assert.equal(await project.isVisible(),true);
  phase='limited';await check.click();await page.locator('#update-status').filter({hasText:'暂时受限'}).waitFor();
  phase='offline';await check.click();await page.locator('#update-status').filter({hasText:'连接失败'}).waitFor();assert.equal(await check.isDisabled(),false);
- assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).getAttribute('href'),'https://github.com/1whoarei1/yanhe-refine/releases/latest');
+ assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).getAttribute('href'),'https://github.com/bitoolkit/yanhe-refine/releases/latest');
  phase='same';await check.click();await page.locator('#update-status').filter({hasText:'未发现新版本'}).waitFor();assert.equal(await page.getByRole('link',{name:'发布页',exact:true}).count(),0);report.checks.push('one plugin row keeps version checking and the project link together; download appears for updates and release-page fallback appears only on errors');
  const connections=page.locator('.connection-entry');assert.equal(await connections.count(),4);assert.equal(await page.locator('.connection-entry[data-state="unknown"]').count(),4);
  assert.equal(await page.locator('.connection-setting details').count(),0);

@@ -33,7 +33,7 @@ for file in source.rglob('*'):
 for name in ['README.md','CHANGELOG.md','THIRD_PARTY_NOTICES.md']:
  if (root/name).exists():
   if name=='README.md':
-   text=(root/name).read_text(encoding='utf8').replace('(docs/screenshots/','(https://raw.githubusercontent.com/1whoarei1/yanhe-refine/main/docs/screenshots/')
+   text=(root/name).read_text(encoding='utf8').replace('(docs/screenshots/','(https://raw.githubusercontent.com/bitoolkit/yanhe-refine/main/docs/screenshots/')
    (folder/name).write_text(text,encoding='utf8')
   else:shutil.copy2(root/name,folder/name)
   files.append(Path(name))
