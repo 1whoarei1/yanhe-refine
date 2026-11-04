@@ -1,8 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {viewPlan,chooseAudio,AudioRouter} from '../src/watch/audio-routing.js';
+import {viewPlan,assignView,chooseAudio,AudioRouter} from '../src/watch/audio-routing.js';
 import {Companion} from '../src/watch/companion.js';
 const streams={screen:'screen',classroom:'room',student:'students'};
+
+test('assigning any occupied position swaps sources and leaves every stream visible once',()=>{
+ const plan=['classroom','screen','student'];
+ for(let slot=0;slot<plan.length;slot++)for(const view of plan){
+  const next=assignView(plan,slot,view);assert.equal(next[slot],view);assert.equal(new Set(next).size,3);assert.deepEqual([...next].sort(),[...plan].sort());
+ }
+ assert.deepEqual(plan,['classroom','screen','student']);
+ assert.deepEqual(assignView(plan,2,'classroom'),['student','screen','classroom']);
+ assert.deepEqual(assignView(plan,0,'missing'),plan);assert.deepEqual(assignView(plan,-1,'screen'),plan);
+ assert.deepEqual(assignView(['classroom','screen'],1,'classroom'),['screen','classroom']);
+});
 test('three sources remain distinct and dual view can choose the student camera',()=>{
  assert.deepEqual(viewPlan(streams,'screen',2,'student'),['screen','student']);
  assert.deepEqual(viewPlan(streams,'student',3,'student'),['student','screen','classroom']);

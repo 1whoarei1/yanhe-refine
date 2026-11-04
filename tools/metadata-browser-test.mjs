@@ -7,6 +7,7 @@ import {chromium} from 'playwright';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),scratch=await mkdtemp(join(tmpdir(),'yanhe-metadata-')),ext=join(scratch,'extension'),out=join(root,'test-results');
 await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),ext,{recursive:true});await mkdir(out,{recursive:true});
 const version=JSON.parse(await readFile(join(ext,'manifest.json'),'utf8')).version;await writeFile(join(ext,'build-info.json'),JSON.stringify({version,catalog:null}));
+await writeFile(join(ext,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 const report={version,mode:'isolated Edge; synthetic LMS metadata; no media or assignment writes',checks:[]};let context,page;
 try{
  context=await chromium.launchPersistentContext(join(scratch,'profile'),{executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`],viewport:{width:1440,height:1000}});context.setDefaultTimeout(20000);

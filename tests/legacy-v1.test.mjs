@@ -6,6 +6,11 @@ import {LegacyYanheApi} from '../src/watch/legacy-api.js';
 const json=(data,code=0)=>new Response(JSON.stringify({code,data}),{headers:{'content-type':'application/json'}});
 const part=(id=301)=>({id,main:`https://cvideo.yanhekt.cn/${id}/main.m3u8`,vga:`https://cvideo.yanhekt.cn/${id}/screen.m3u8`,duration:600});
 const session=(id=71990,videos=[part()])=>({id,course_id:9397,number:'20202021210007100203',title:'集合',started_at:'2026-09-07 08:00:00',videos});
+test('an expired first tab does not hide a valid legacy login in another tab',async()=>{
+ const tokens=['a'.repeat(32),'b'.repeat(32)],seen=[];
+ const api=new LegacyYanheApi({hash:md5,tabs:{query:async()=>[{id:0},{id:1}],sendMessage:async id=>({token:tokens[id]})},index:{},fetcher:async(_url,options)=>{const token=options.headers.Authorization||options.headers.authorization;seen.push(token);return seen.length===1?json({},401):json({id:7});}});
+ await api.authenticate();assert.equal(api.profile.id,7);assert.equal(seen.length,2);assert.equal(api.token,tokens[1]);
+});
 let user=800000;
 function fixture({list=()=>[session()],local=true,metadataStatus=12121028}={}){
  const state={user:++user},calls=[];

@@ -11,8 +11,8 @@ export class LmsClient extends ReaderBridge {
   }
   return rows;
  }
- async homeworks(id){const rows=[];for(let page=1;page<=100;page++){const data=await this.read({kind:'homework',id,page});rows.push(...data.rows);if(page>=data.pages)return rows;}throw new Error('作业列表超过 100 页，请在新乐学查看');}
- async materials(id){return (await this.read({kind:'materials',id})).rows;}
+ async homeworks(id,{signal}={}){const rows=[];for(let page=1;page<=100;page++){signal?.throwIfAborted();const data=await this.read({kind:'homework',id,page},{signal});signal?.throwIfAborted();rows.push(...data.rows);if(page>=data.pages)return rows;}throw new Error('作业列表超过 100 页，请在新乐学查看');}
+ async materials(id,options){return (await this.read({kind:'materials',id},options)).rows;}
  async resources(courseId,id){return (await this.read({kind:'resources',courseId,id})).rows;}
  async task(courseId,id){return this.read({kind:'task',courseId,id});}
 }

@@ -22,6 +22,11 @@ async function control(selector){
   if(menu==='volume')await player.locator('#control-volume').hover();else await player.locator('#control-'+menu).click();
   await player.locator('#menu-'+menu).waitFor({state:'visible'});
  }
+ if(menu==='settings'){
+  const advanced=await element.evaluate(node=>Boolean(node.closest('#settings-more'))),quick=await element.evaluate(node=>Boolean(node.closest('#settings-quick')));
+  if(advanced&&await player.locator('#settings-more').isHidden())await player.locator('#settings-more-open').click();
+  if(quick&&await player.locator('#settings-quick').isHidden())await player.locator('#settings-back').click();
+ }
  return element;
 }
 
@@ -39,6 +44,13 @@ try{
  }
  context=await chromium.launchPersistentContext(join(scratch,'profile'),{executablePath:existsSync(executable)?executable:undefined,...(!existsSync(executable)?{channel:'chromium'}:{}),headless:true,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`],viewport:{width:1440,height:1000}});
  context.setDefaultTimeout(20000);
+ await context.addInitScript(()=>{
+  const Original=window.Worker;window.fixtureHlsWorker={created:0,demux:0,completed:0};
+  window.Worker=class extends Original{
+   constructor(url,options){super(url,options);this.fixtureHls=String(url).includes('/vendor/hls.worker.js');if(this.fixtureHls){window.fixtureHlsWorker.created++;this.addEventListener('message',event=>{if(event.data?.event==='transmuxComplete')window.fixtureHlsWorker.completed++;});}}
+   postMessage(data,...args){if(this.fixtureHls&&data?.cmd==='demux')window.fixtureHlsWorker.demux++;return super.postMessage(data,...args);}
+  };
+ });
  report.browserVersion=context.browser()?.version();
  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
  await context.addCookies([{name:'_token',value:'eyJfixture.live.signature',domain:'aita.yanhekt.cn',path:'/',secure:true}]);
@@ -82,12 +94,14 @@ try{
  await player.waitForFunction(()=>{const v=document.getElementById('video');return v.currentTime>.2&&v.webkitAudioDecodedByteCount>0;});
  assert.equal(await player.locator('#audio-source').inputValue(),'auto');assert.equal(await player.locator('#video').evaluate(v=>v.muted),false);
  report.checks.push('default live classroom stream really decodes generated AAC audio');
+ report.hlsWorker=await player.evaluate(()=>window.fixtureHlsWorker);assert.ok(report.hlsWorker.created>0&&report.hlsWorker.demux>0&&report.hlsWorker.completed>0,JSON.stringify(report.hlsWorker));
+ report.checks.push('the packaged same-origin HLS worker processes media chunks and returns transmuxed data under the extension CSP');
  const tabId=await worker.evaluate(async url=>(await chrome.tabs.query({})).find(t=>t.url===url).id,page.url());
  await worker.evaluate(id=>chrome.tabs.update(id,{muted:true}),tabId);await player.locator('#video').evaluate(v=>v.volume=0);await (await control('#audio-source')).selectOption('muted');
  await (await control('#control-volume')).click();await player.waitForFunction(()=>{const v=document.getElementById('video');return !v.muted&&v.volume>0&&!v.paused;});
  assert.equal(await worker.evaluate(async id=>(await chrome.tabs.get(id)).mutedInfo.muted,tabId),false);
  report.checks.push('enable-sound gesture clears selected mute, zero volume and the extension tab mute');
- await (await control('#screen')).click();await player.waitForFunction(()=>{const a=document.getElementById('video'),b=document.getElementById('audio-video');return a.muted&&!b.muted&&b.webkitAudioDecodedByteCount>0&&!b.paused;});
+ await (await control('#primary-view')).selectOption('screen');await player.waitForFunction(()=>{const a=document.getElementById('video'),b=document.getElementById('audio-video');return a.muted&&!b.muted&&b.webkitAudioDecodedByteCount>0&&!b.paused;});
  assert.equal(await player.locator('#secondary-stage').isVisible(),false);
  report.checks.push('silent screen-only view gets classroom audio through a hidden companion decoder');
  await (await control('#dual')).click();await player.waitForFunction(()=>document.getElementById('secondary-video').videoWidth>0&&!document.getElementById('secondary-video').muted);assert.equal(await player.locator('#secondary-stage').isVisible(),true);
@@ -116,8 +130,27 @@ try{
  await assertThreeLayout();await player.locator('#media-grid').screenshot({path:join(out,'three-stream-layout.png'),timeout:20000});await player.getByRole('button',{name:'网页全屏',exact:true}).click();await player.locator('.workspace.viewer-fullscreen').waitFor();await assertThreeLayout();await player.getByRole('button',{name:'屏幕全屏',exact:true}).click();await player.waitForFunction(()=>document.fullscreenElement===document.querySelector('.workspace'));await assertThreeLayout();await player.getByRole('button',{name:'退出屏幕全屏',exact:true}).click();await player.waitForFunction(()=>!document.fullscreenElement);await player.getByRole('button',{name:'退出网页全屏',exact:true}).click();
  report.checks.push('normal, browser-fullscreen and display-fullscreen triple layouts all put one large view left and two stacked views right');
 
- await (await control('#student')).click();await player.waitForFunction(()=>document.getElementById('video').webkitAudioDecodedByteCount>0&&!document.getElementById('video').muted);assert.equal(await player.locator('#triple').getAttribute('aria-pressed'),'true');
- await (await control('#screen')).click();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);await (await control('#dual')).click();await (await control('#secondary-view')).selectOption('student');await (await control('#audio-source')).selectOption('classroom');
+ await control('#primary-view');
+ const quickMenu=await player.locator('#menu-settings').evaluate(node=>({height:node.getBoundingClientRect().height,background:getComputedStyle(node).backgroundColor,page:node.dataset.page}));
+ assert.ok(quickMenu.height<230,JSON.stringify(quickMenu));assert.equal(quickMenu.background,'rgb(28, 35, 37)');assert.equal(quickMenu.page,'quick');
+ assert.equal(await player.locator('#settings-more').isVisible(),false);assert.equal(await player.locator('#audio-warning').isVisible(),false);
+ await player.locator('#media-grid').screenshot({path:join(out,'settings-quick-three-view.png')});
+ await player.locator('#settings-more-open').click();assert.equal(await player.locator('#settings-quick').isVisible(),false);assert.equal(await player.locator('#settings-more').isVisible(),true);
+ assert.equal(await player.locator('#picture-in-picture,#retry,.settings-actions').count(),0);
+ const settingsFit=await player.evaluate(()=>{const menu=document.getElementById('menu-settings').getBoundingClientRect(),assignment=document.getElementById('view-assignment').getBoundingClientRect();return {menuBottom:menu.bottom,assignmentBottom:assignment.bottom};});assert.ok(settingsFit.assignmentBottom<=settingsFit.menuBottom,JSON.stringify(settingsFit));
+ assert.deepEqual(await player.locator('#view-assignment .view-slot>span').allTextContents(),['左侧','右上','右下']);
+ await player.locator('#tertiary-view').selectOption('classroom');
+ assert.deepEqual(await player.evaluate(()=>['layout-primary-view','secondary-view','tertiary-view'].map(id=>document.getElementById(id).value)),['screen','student','classroom']);
+ await player.waitForFunction(()=>['video','secondary-video','tertiary-video','audio-video'].filter(id=>!document.getElementById(id).muted).join(',')==='secondary-video');
+ await player.locator('#tertiary-view').selectOption('student');
+ await player.waitForFunction(()=>['video','secondary-video','tertiary-video','audio-video'].filter(id=>!document.getElementById(id).muted).join(',')==='tertiary-video');
+ await player.locator('#media-grid').screenshot({path:join(out,'settings-more-three-view.png')});
+ await player.locator('#settings-back').press('Escape');assert.equal(await player.locator('#settings-quick').isVisible(),true);assert.equal(await player.locator('#menu-settings').isVisible(),true);
+ await player.locator('#settings-more-open').press('Escape');assert.equal(await player.locator('#menu-settings').isVisible(),false);assert.equal(await player.locator('#control-settings').evaluate(node=>node===document.activeElement),true);
+ report.checks.push('opaque four-row quick settings open a separate page; the positional diagram swaps right-side sources without duplication or mixed audio, and Escape backs out one level at a time');
+
+ await (await control('#primary-view')).selectOption('student');await player.waitForFunction(()=>document.getElementById('video').webkitAudioDecodedByteCount>0&&!document.getElementById('video').muted);assert.equal(await player.locator('#triple').getAttribute('aria-pressed'),'true');
+ await (await control('#primary-view')).selectOption('screen');await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);await (await control('#dual')).click();await (await control('#secondary-view')).selectOption('student');await (await control('#audio-source')).selectOption('classroom');
  await player.waitForFunction(()=>{const v=document.getElementById('audio-video');return !v.muted&&v.webkitAudioDecodedByteCount>0&&!v.paused;});assert.equal(await player.locator('#tertiary-stage').isVisible(),false);
  report.checks.push('switching the main view preserves triple mode; dual screen/student can use a hidden classroom sound source');
  await player.locator('#video').evaluate(v=>v.pause());await (await control('#timely-mode')).click();await player.locator('#video').scrollIntoViewIfNeeded();
@@ -157,10 +190,10 @@ try{
  const oldLogin=await context.newPage();await oldLogin.goto('https://www.yanhekt.cn/home?yh_native=1');await oldLogin.evaluate(()=>localStorage.setItem('auth',JSON.stringify({token:'d'.repeat(32),login:true})));await page.bringToFront();
  await worker.evaluate(()=>chrome.storage.local.set({'player:liveCourseLinks':[{modern:'102154',legacy:'73687'},{modern:'102154',legacy:'73688'}]}));await page.reload();if(refine){await page.frameLocator('iframe.watch-frame').locator('#play').waitFor();player=page.frames().find(f=>f.url().includes('/watch/player.html'));}else player=page;
  await player.locator('#play:not([disabled])').waitFor();await player.waitForFunction(()=>document.getElementById('live-course-candidate').options.length===3);assert.equal(await player.locator('#switch-live-platform').isDisabled(),true);assert.equal(await player.locator('#live-course-candidate').inputValue(),'');report.checks.push('multiple course candidates never preselect the first course or enable an ambiguous switch');await player.locator('#play').click();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);
- await (await control('#live-platform-tools')).evaluate(details=>details.open=true);await (await control('#alternate-live-url')).fill('https://www.yanhekt.cn/course/73687?yh_native=1');await player.locator('#link-live-form button').click();await player.locator('#active-live-platform').filter({hasText:'旧站'}).waitFor();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);
+ await (await control('#live-platform-tools')).evaluate(details=>details.open=true);await (await control('#alternate-live-url')).fill('https://www.yanhekt.cn/course/73687?yh_native=1');await player.locator('#link-live-form button').click();await player.locator('#active-live-platform').filter({hasText:'旧延河'}).waitFor();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);
  await player.waitForFunction(()=>{const v=document.getElementById('audio-video');return v.webkitAudioDecodedByteCount>0&&!v.muted&&!v.paused;});assert.ok(legacyMediaRequests>0);assert.equal(legacyVideoTokenRequests,0);assert.match(await player.locator('#course-meta').innerText(),/102154/);
  const links=await worker.evaluate(()=>chrome.storage.local.get('player:liveCourseLinks'));assert.ok(links['player:liveCourseLinks'].some(row=>row.modern==='102154'&&row.legacy==='73687'));
- await (await control('#switch-live-platform')).click();await player.locator('#active-live-platform').filter({hasText:'新站'}).waitFor();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);await oldLogin.close();
+ await (await control('#switch-live-platform')).click();await player.locator('#active-live-platform').filter({hasText:'新延河'}).waitFor();await player.waitForFunction(()=>document.getElementById('video').videoWidth>0);await oldLogin.close();
  report.checks.push('the supplied cross-platform course pair resolves a separate old live ID, uses its own old media URLs without a replay token, and switches back without changing the logical course ID');
  await player.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async value=>window.fixtureDiagnostics=value}}));await (await control('#copy-playback-diagnostics')).click();const diagnosis=await player.evaluate(()=>JSON.parse(window.fixtureDiagnostics));assert.equal(diagnosis.version,manifest.version);
 assert.equal(diagnosis.media.length,4);assert.equal(diagnosis.course.id,'102154');assert.equal(diagnosis.liveTarget,null);assert.ok(!/https?:|Bearer|Xvideo|_token/.test(JSON.stringify(diagnosis)));report.checks.push('copied diagnostics report runtime version and routing state without media URLs or credentials');

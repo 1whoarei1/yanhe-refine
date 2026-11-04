@@ -8,6 +8,7 @@ import {chromium} from 'playwright';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),refine=JSON.parse(await readFile(join(root,'package.json'),'utf8')).name==='yanhe-refine',scratch=await mkdtemp(join(tmpdir(),'yanhe-imports-')),ext=join(scratch,'extension'),out=join(root,'test-results');
 await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),ext,{recursive:true});await mkdir(out,{recursive:true});
 const version=JSON.parse(await readFile(join(ext,'manifest.json'),'utf8')).version;if(refine)await writeFile(join(ext,'build-info.json'),JSON.stringify({version,catalog:null}));
+await writeFile(join(ext,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 const modernPath=existsSync(join(root,'local-data/release-catalog.json'))?join(root,'local-data/release-catalog.json'):join(scratch,'modern.json'),oldPath=existsSync(join(root,'local-data/release-session-index.json'))?join(root,'local-data/release-session-index.json'):join(scratch,'old.json');
 if(!existsSync(modernPath))await writeFile(modernPath,JSON.stringify({schema:1,courses:[{platform:'modern',id:'100',title:'数据课程',teacher:'教师',term:'2026-2027-1'}]}));
 if(!existsSync(oldPath))await writeFile(oldPath,JSON.stringify({format:'yanhekt-session-index/v1',source:{kind:'self-collected'},partial:true,courses:[{id:'9397',name:'离散数学',teachers:['教师'],term:'2020-2021-2',sessions:['71990','72000']}]}));

@@ -76,6 +76,13 @@ test('ambiguous network failures survive worker restart without repeating the PO
  const next=new LmsWriter(s.reader,{session:s.session});assert.equal((await next.submit(10,20,payload)).status,'uncertain');assert.equal(s.writes.length,1);
 });
 
+test('submission receipts cannot be reused by another logged-in account with the same request ID',async()=>{
+ const s=server(),payload={requestId:'test-account-0001',comment:'answer'};
+ assert.equal((await s.writer.submit(10,20,payload)).status,'submitted');s.userId=8;s.history=[];
+ const restarted=new LmsWriter(s.reader,{session:s.session,cookies:s.writer.cookies});
+ assert.equal((await restarted.submit(10,20,payload)).status,'submitted');assert.equal(s.writes.filter(row=>row.path.endsWith('/submissions')).length,2);
+});
+
 test('official MEDIA uploads use their original URL without forwarding LMS credentials or CSRF headers',async()=>{
  const s=server();s.storage='MEDIA';const file=await s.writer.upload(10,20,{name:'answer.zip',size:3,encoded:'YWJj'});
  assert.equal(file.id,'50');assert.equal(s.writes.filter(r=>r.path==='/upload/file/50').length,1);

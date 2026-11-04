@@ -1,6 +1,7 @@
 import { ORIGIN, tokenFromCookie, replayRows, streamsFrom, signedUrl, subtitleRows } from './core.js';
 import { liveRows, lectureMode, liveStreams } from './live-core.js';
 import {ReplayCache} from './replay-cache.js';
+import {readAuthTabs} from './tab-auth.js';
 
 class AuthError extends Error {}
 
@@ -35,10 +36,9 @@ export class YanheApi {
     const values = cookies.filter(cookie => ['aita.yanhekt.cn','.aita.yanhekt.cn','yanhekt.cn','.yanhekt.cn'].includes(cookie.domain)).map(cookie => cookie.value);
     if (this.tabs) {
       try {
-        const pages = await this.tabs.query({ url: [ORIGIN + '/*'] });
-        const results = await Promise.allSettled(pages.slice(0,8).map(page => this.tabs.sendMessage(page.id, { type: 'READ_AUTH_COOKIE' }, { frameId: 0 })));
-        for (const result of results) if (result.status === 'fulfilled' && Array.isArray(result.value?.values)) values.push(...result.value.values.slice(0,8));
-      } catch { /* Already-open pages may need a refresh after the extension updates. */ }
+        const results=await readAuthTabs(this.tabs,ORIGIN,{type:'READ_AUTH_COOKIE'},{signal});
+        for(const result of results)if(Array.isArray(result?.values))values.push(...result.values.slice(0,8));
+      } catch { signal?.throwIfAborted(); /* Already-open pages may need a refresh after the extension updates. */ }
     }
     const candidates = [...new Set(values.map(tokenFromCookie).filter(Boolean))].slice(0,8);
     if (!candidates.length) {

@@ -12,25 +12,36 @@ export function captionPlacement(box,width,height,dock,controlsVisible){
 export function mountVideoCaptions({video,getText,enabled}){
  const stage=video.parentElement,surface=document.getElementById('media-grid'),dock=document.querySelector('.player-control-dock');
  const layer=document.createElement('div'),text=document.createElement('span');layer.id='video-caption';layer.className='video-caption';layer.setAttribute('aria-hidden','true');layer.hidden=true;layer.append(text);stage.append(layer);
- let frame=0,disposed=false;
+ let frame=0,disposed=false,layoutDirty=true,placement=null,lastVisible;
+ const hide=()=>{if(!layer.hidden)layer.hidden=true;};
+ const style=(name,value)=>{if(layer.style[name]!==value)layer.style[name]=value;};
  function render(){
   frame=0;if(disposed)return;
   const value=enabled()&&document.pictureInPictureElement!==video?getText(video.currentTime):'';
-  if(!value){layer.hidden=true;text.textContent='';return;}
+  if(!value){hide();if(text.textContent)text.textContent='';return;}
   const visible=!surface.classList.contains('controls-idle')||surface.classList.contains('menu-open');
-  const placement=captionPlacement(video.getBoundingClientRect(),video.videoWidth,video.videoHeight,dock?.getBoundingClientRect(),visible);
-  if(!placement||placement.maxHeight<placement.font*1.5){layer.hidden=true;return;}
-  const bounds=stage.getBoundingClientRect();
+  if(layoutDirty||lastVisible!==visible){
+   placement=captionPlacement(video.getBoundingClientRect(),video.videoWidth,video.videoHeight,dock?.getBoundingClientRect(),visible);lastVisible=visible;
+   if(placement){
+    const bounds=stage.getBoundingClientRect();
+    style('left',placement.left-bounds.left+'px');style('width',placement.width+'px');style('bottom',bounds.bottom-placement.bottom+'px');style('maxHeight',placement.maxHeight+'px');style('fontSize',placement.font+'px');
+    layoutDirty=false;
+   }
+  }
+  if(!placement||placement.maxHeight<placement.font*1.5){hide();return;}
   if(text.textContent!==value)text.textContent=value;
-  layer.style.left=placement.left-bounds.left+'px';layer.style.width=placement.width+'px';layer.style.bottom=bounds.bottom-placement.bottom+'px';layer.style.maxHeight=placement.maxHeight+'px';layer.style.fontSize=placement.font+'px';layer.hidden=false;
+  if(layer.hidden)layer.hidden=false;
  }
  function update(){if(!frame&&!disposed)frame=requestAnimationFrame(render);}
- function clear(){cancelAnimationFrame(frame);frame=0;layer.hidden=true;text.textContent='';}
- for(const event of ['timeupdate','loadedmetadata','loadeddata','resize','seeked','seeking','emptied','enterpictureinpicture','leavepictureinpicture'])video.addEventListener(event,update);
- document.getElementById('show-captions').addEventListener('change',update);
- const resize=new ResizeObserver(update);resize.observe(video);resize.observe(stage);if(dock)resize.observe(dock);
- const controls=new MutationObserver(update);controls.observe(surface,{attributes:true,attributeFilter:['class']});
- document.addEventListener('fullscreenchange',update);window.addEventListener('resize',update);
+ function geometry(){layoutDirty=true;update();}
+ function clear(){cancelAnimationFrame(frame);frame=0;hide();if(text.textContent)text.textContent='';layoutDirty=true;placement=null;}
+ for(const event of ['timeupdate','seeked','seeking'])video.addEventListener(event,update);
+ for(const event of ['loadedmetadata','loadeddata','resize','emptied','enterpictureinpicture','leavepictureinpicture'])video.addEventListener(event,geometry);
+ document.getElementById('show-captions').addEventListener('change',geometry);
+ const resize=new ResizeObserver(geometry);resize.observe(video);resize.observe(stage);if(dock)resize.observe(dock);
+ let className=surface.className;
+ const controls=new MutationObserver(()=>{if(className!==surface.className){className=surface.className;geometry();}});controls.observe(surface,{attributes:true,attributeFilter:['class']});
+ document.addEventListener('fullscreenchange',geometry);window.addEventListener('resize',geometry);
  window.addEventListener('pagehide',()=>{disposed=true;clear();resize.disconnect();controls.disconnect();});
  return {update,clear};
 }

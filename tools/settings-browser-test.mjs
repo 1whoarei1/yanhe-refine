@@ -3,9 +3,12 @@ import {readFile,writeFile,mkdir,mkdtemp,cp,rm} from 'node:fs/promises';
 import {resolve,join,dirname,basename} from 'node:path';
 import {tmpdir} from 'node:os';
 import {chromium} from 'playwright';
+import {installSignedOutRecoveryFixture} from './signed-out-recovery-fixture.mjs';
 const root=process.cwd(),scratch=await mkdtemp(join(tmpdir(),'yanhe-settings-')),ext=join(scratch,'extension'),out=join(root,'test-results');
 await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),ext,{recursive:true});await mkdir(out,{recursive:true});
 const manifest=JSON.parse(await readFile(join(ext,'manifest.json'),'utf8'));await writeFile(join(ext,'build-info.json'),JSON.stringify({version:manifest.version,catalog:null}));
+await writeFile(join(ext,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
+await installSignedOutRecoveryFixture(ext);
 const nextParts=manifest.version.split('.').map(Number);nextParts[nextParts.length-1]++;const nextVersion=nextParts.join('.');
 const report={mode:'isolated Edge; synthetic GitHub releases and platform responses; no real account requests',checks:[]};let context,page,phase='new',releasePending,releaseOld;
 let oldPhase='slow';
@@ -20,6 +23,7 @@ try{
   if(url.hostname==='aita.yanhekt.cn'&&url.pathname.endsWith('/infosimple'))return json({code:200,params:{id:7,tenant_id:21,phone:'fixture',account:'fixture'}});
   if(url.hostname==='aita.yanhekt.cn'&&url.pathname.endsWith('/account-profile/course'))return json({code:1000,params:{result:{data:[],total:0}}});
   if(url.hostname==='zy-eclass.bit.edu.cn'&&url.pathname==='/api/my-courses')return json({courses:[]});
+  if(url.hostname==='sso.bit.edu.cn')return route.fulfill({contentType:'text/html',body:'<h1>Login required</h1>'});
   if(url.hostname==='lexue.bit.edu.cn'){
    if(oldPhase==='slow')await new Promise(resolve=>releaseOld=resolve);
    if(oldPhase==='failed')return route.fulfill({status:503,contentType:'text/html',body:'Unavailable'});
@@ -58,8 +62,8 @@ try{
  const connectionCheck=page.getByRole('button',{name:'检查连接',exact:true});await connectionCheck.click();
  const busyCheck=page.getByRole('button',{name:'检查中…',exact:true});await busyCheck.waitFor();assert.equal(await busyCheck.isDisabled(),true);
  const modern=page.getByRole('link',{name:'新延河',exact:true}),legacy=page.getByRole('link',{name:'旧延河',exact:true}),newLms=page.getByRole('link',{name:'新乐学',exact:true}),oldLms=page.getByRole('link',{name:'旧乐学',exact:true});
- await modern.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await newLms.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await legacy.locator('.connection-state').filter({hasText:'需要登录'}).waitFor();
- assert.equal(await oldLms.getAttribute('data-state'),'checking');assert.equal(await oldLms.getAttribute('href'),'https://lexue.bit.edu.cn/my/');assert.equal(new URL(await legacy.getAttribute('href')).searchParams.get('yh_mode'),'native');
+ await modern.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await newLms.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await legacy.locator('.connection-state').filter({hasText:'需验证'}).waitFor();
+ assert.equal(await oldLms.getAttribute('data-state'),'checking');assert.equal(await oldLms.getAttribute('href'),'https://lexue.bit.edu.cn/my/');assert.equal(new URL(await legacy.getAttribute('href')).searchParams.get('yh_native'),'1');assert.equal(new URL(await legacy.getAttribute('href')).searchParams.has('yh_mode'),false);assert.equal(await legacy.getAttribute('target'),'_blank');
  assert.equal(typeof releaseOld,'function');oldPhase='failed';releaseOld();await oldLms.locator('.connection-state').filter({hasText:'读取失败'}).waitFor();await connectionCheck.waitFor();assert.equal(await connectionCheck.isDisabled(),false);
  const colors=await connections.evaluateAll(rows=>rows.map(row=>getComputedStyle(row.querySelector('.connection-state')).color));assert.equal(new Set(colors).size,3);
  const marker=oldLms.locator('.connection-marker');assert.equal(await marker.getAttribute('aria-hidden'),'true');assert.equal(await oldLms.getAttribute('aria-describedby'),'connection-lexue');
@@ -70,8 +74,8 @@ try{
  await page.screenshot({path:join(out,'settings-update-desktop.png'),fullPage:true});await page.locator('.connection-setting').screenshot({path:join(out,'settings-connection-compact.png')});await page.setViewportSize({width:375,height:900});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:join(out,'settings-update-mobile.png'),fullPage:true});
  assert.equal(await page.locator('.connection-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2);
- oldPhase='healthy';await connectionCheck.click();await oldLms.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await connectionCheck.waitFor();
- assert.equal(await page.locator('.connection-entry[data-state="checking"]').count(),0);report.checks.push('retry clears the previous error and every loading indicator; narrow screens use two columns');
+ oldPhase='healthy';await page.waitForTimeout(3100);await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await oldLms.locator('.connection-state').filter({hasText:'已连接'}).waitFor();await connectionCheck.waitFor();
+ assert.equal(await page.locator('.connection-entry[data-state="checking"]').count(),0);report.checks.push('returning to the visible settings page automatically rechecks failed platforms without another click, clears every loading indicator, and keeps two columns on narrow screens');
  assert.deepEqual(errors,[]);report.checks.push('desktop and 375px settings render without horizontal overflow or page errors');report.ok=true;
 }catch(error){report.ok=false;report.error=String(error.stack);process.exitCode=1;await page?.screenshot({path:join(out,'settings-update-failed.png'),fullPage:true}).catch(()=>{});}
 finally{await context?.close();if(dirname(resolve(scratch))===resolve(tmpdir())&&basename(scratch).startsWith('yanhe-settings-'))await rm(scratch,{recursive:true,force:true});await writeFile(join(out,'settings-update-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}

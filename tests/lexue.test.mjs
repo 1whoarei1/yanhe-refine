@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {LexueReader} from '../src/lexue-reader.js';
-import {LEXUE,moodleSession,lexueCourses,courseActivities,materialContent,assignmentContent,fileUrl} from '../src/lexue-core.js';
+import {LEXUE,moodleSession,lexueCourses,courseActivities,materialContent,assignmentContent,fileUrl,lexueFile,decodeFileName} from '../src/lexue-core.js';
 import {safeRecords} from '../src/records.js';
 import {LexueClient} from '../src/lexue-client.js';
 
@@ -22,6 +22,30 @@ test('folder files are deduplicated and external or credential-bearing URLs are 
 test('assignment content, attachments and midnight deadlines work without enabling a Moodle write path',()=>{const base=courseActivities(course,401).find(a=>a.id==='503');const task=assignmentContent(assignment,base);assert.equal(task.state,'pending');assert.equal(task.attachments.length,1);assert.equal(task.deadline,Date.parse('2026-11-28T00:00:00+08:00'));assert.equal(task.canSubmit,false);assert.equal(task.nativeAction,'在旧乐学提交');assert.equal(task.historyError,false);const unknown=assignmentContent(html('<div id="intro">题目</div>'),base);assert.equal(unknown.state,'unknown');assert.equal(unknown.historyError,true);});
 test('fresh Moodle readers validate enrollment and course/module ownership before reading attachments',async()=>{const mock=fetcher(u=>response(assignment,u.href));const reader=new LexueReader(mock);await assert.rejects(()=>reader.read({kind:'resources',courseId:999,id:503}),/本人/);assert.equal(mock.calls.filter(c=>new URL(c.url).pathname==='/course/view.php').length,0);await assert.rejects(()=>reader.read({kind:'resources',courseId:401,id:999}),/不属于/);const {rows}=await reader.read({kind:'resources',courseId:401,id:503});assert.equal(rows.length,1);assert.equal(mock.calls.filter(c=>c.options.method==='POST').length,1);});
 test('resource redirects use range metadata rather than reading binary PDFs as HTML',async()=>{const url=LEXUE+'/pluginfile.php/903/mod_resource/content/0/slides.pdf';let range;const reader=new LexueReader(fetcher((_u,options)=>{range=options.headers.Range;return response('x',url,'application/pdf',206,{'content-range':'bytes 0-0/12800','content-disposition':'attachment; filename="slides.pdf"'});}));const data=await reader.read({kind:'resources',courseId:401,id:501});assert.equal(range,'bytes=0-0');assert.equal(data.rows[0].size,12800);assert.equal(data.rows[0].name,'slides.pdf');});
+
+test('the actual primary link classifies a report template as a resource even with stale assignment CSS',()=>{
+ const page=html('<li class="activity modtype_assign" id="module-501"><div class="activityinstance"><a href="/mod/resource/view.php?id=501"><span class="instancename">实验报告模版</span></a></div></li>');
+ const [row]=courseActivities(page,401);assert.equal(row.type,'material');assert.equal(row.module,'resource');
+ const [direct]=courseActivities(html(`<li class="activity modtype_assign" id="module-502"><div class="activityinstance"><a href="${file}">实验报告模版.docx</a></div></li>`),401);assert.equal(direct.type,'material');assert.equal(direct.url,file);
+ const [task]=courseActivities(html(module(503,'assign','实验作业')+`<a href="${file}">附件</a>`),401);assert.equal(task.type,'task');
+});
+
+test('file redirects retain the real UTF-8 name and never decode a mislabeled binary response as HTML',async()=>{
+ const url=LEXUE+'/pluginfile.php/903/mod_resource/content/0/'+encodeURIComponent('实验报告模版.docx');
+ const reader=new LexueReader(fetcher(()=>{const r=response('PK\u0000binary',url,'text/html',206,{'content-range':'bytes 0-0/12800','content-disposition':"attachment; filename=fallback.docx; filename*=UTF-8''"+encodeURIComponent('实验报告模版.docx')});r.text=()=>{throw Error('binary must not be read as HTML');};return r;}));
+ const data=await reader.read({kind:'resources',courseId:401,id:501});assert.equal(data.rows[0].name,'实验报告模版.docx');assert.equal(data.rows[0].size,12800);assert.equal(data.rows[0].url,url+'?forcedownload=1');
+});
+
+test('the real report template Latin-1 filename decodes to Chinese and cannot send C1 control bytes to downloads',()=>{
+ const expected='实验报告模板.doc',latin1=String.fromCharCode(...new TextEncoder().encode(expected));
+ assert.equal(decodeFileName(latin1),expected);assert.equal(decodeFileName(expected),expected);assert.equal(decodeFileName('café.doc'),'café.doc');
+ const row=lexueFile(LEXUE+'/pluginfile.php/903/mod_resource/content/0/'+encodeURIComponent(expected),latin1,38912);assert.equal(row.name,expected);assert.equal(/[\x7f-\x9f]/.test(row.name),false);
+});
+
+test('a partial HTML resource landing page is fetched completely before extracting its file link',async()=>{
+ let attempts=0;const reader=new LexueReader(fetcher(u=>++attempts===1?response('<',u.href,'text/html',206):response(html(`<a href="${file}">模板.docx</a>`),u.href)));
+ const data=await reader.read({kind:'resources',courseId:401,id:501});assert.equal(attempts,2);assert.equal(data.rows[0].name,'模板.docx');
+});
 test('SSO redirects require login while Moodle RPC failures retain their own cause',async()=>{const reader=new LexueReader({fetch:async()=>response('login','https://sso.bit.edu.cn/cas/login')});await assert.rejects(()=>reader.courses(),/登录/);const mock=fetcher();const broken=new LexueReader({fetch:(url,options)=>new URL(url).pathname==='/lib/ajax/service.php'?Promise.resolve(response('[{"error":true}]',url,'application/json')):mock.fetch(url,options)});await assert.rejects(()=>broken.courses(),/课程接口读取失败/);const expired=new LexueReader({fetch:(url,options)=>new URL(url).pathname==='/lib/ajax/service.php'?Promise.resolve(response('[{"error":true,"exception":{"errorcode":"invalidsesskey"}}]',url,'application/json')):mock.fetch(url,options)});await assert.rejects(()=>expired.courses(),/登录/);});
 test('record exports preserve distinct new/old LMS associations while dropping unrecognized data',()=>{const rows=safeRecords({'desk:mappings':{'modern:21:900':'401','modern:21:901':'lexue:401','modern:21:902':file},session:'private'});assert.deepEqual(rows,{'desk:mappings':{'modern:21:900':'401','modern:21:901':'lexue:401'}});});
 test('a failed old-LMS tab cannot block another tab or the authenticated background reader',async()=>{const before=globalThis.chrome;try{globalThis.chrome={tabs:{query:async()=>[{id:1},{id:2}],sendMessage:async (id,message)=>id===1?{ok:false,error:'expired tab'}:message.type==='DESK_READER_PING'?{version:1,kind:'lexue'}:{ok:true,data:{rows:[{id:'401'}]}}}};const client=new LexueClient();let fallbackReads=0;client.fallback={read:async()=>{fallbackReads++;return {rows:[{id:'402'}]};}};assert.equal((await client.courses()).at(0).id,'401');assert.equal(fallbackReads,0);globalThis.chrome.tabs.sendMessage=async()=>({ok:false,error:'expired tab'});assert.equal((await client.courses()).at(0).id,'402');assert.equal(fallbackReads,1);}finally{globalThis.chrome=before;}});

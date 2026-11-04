@@ -42,3 +42,5 @@ The personal course index is user-provided data, excluded from the public packag
 感谢 [bit-admin/Yanhekt-AutoSlides](https://github.com/bit-admin/Yanhekt-AutoSlides) 的公开 session 索引、在线查询 API 及旧站元数据研究。参考修订 `746cd87ccc4da59cb838adc023200531aa379a85` 的 `share/docs/api.md` 和 `indexer/src/yanhekt.ts`；上游采用 [Apache-2.0](https://github.com/bit-admin/Yanhekt-AutoSlides/blob/746cd87ccc4da59cb838adc023200531aa379a85/LICENSE)。本项目依据公开 HTTP 契约独立编写客户端，没有复制上游实现模块、打包加密数据库或引入构建密钥。在线索引仍在完善，实际覆盖与可用性由该服务决定。
 
 HLS playback uses the full hls.js 1.7.3 build so platform-provided alternate audio playlists can be loaded. The upstream Apache-2.0 license remains included.
+
+The static `watch/vendor/hls.worker.js` is also from the official hls.js 1.7.3 npm package. It runs media transmuxing under the existing same-origin worker policy. See the upstream [worker configuration documentation](https://github.com/video-dev/hls.js/blob/v1.7.3/docs/API.md#workerpath).

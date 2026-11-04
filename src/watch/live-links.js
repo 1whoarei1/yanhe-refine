@@ -1,6 +1,8 @@
 import {parseCourse} from './core.js';
 import {YanheApi} from './api.js';
 import {LegacyYanheApi} from './legacy-api.js';
+import {readImportedCatalog} from './catalog-import.js';
+import {sharedCatalog} from './catalog-client.js';
 
 const valid=id=>/^\d{1,12}$/.test(String(id||''));
 const normal=text=>String(text||'').normalize('NFKC').toLowerCase().replace(/\s+/g,'');
@@ -23,6 +25,16 @@ export function matchingLive(rows,start){
 }
 export function cleanLinks(value){return Array.isArray(value)?value.filter(row=>row&&typeof row==='object'&&valid(row.modern)&&valid(row.legacy)).slice(-100).map(row=>({modern:String(row.modern),legacy:String(row.legacy)})):[];}
 
+export async function liveCourseCandidates(course,peerPlatform,{readCatalog=readImportedCatalog,signal}={}){
+ if(!['legacy','modern'].includes(peerPlatform))throw new Error('平台无效');signal?.throwIfAborted();
+ if(readCatalog===readImportedCatalog){
+  const identity={title:course.title||course.name,term:course.term,teacher:course.teacher,teachers:course.teachers};
+  const result=await sharedCatalog('liveCandidates',[identity,peerPlatform],signal);if(result.shared)return result.value;
+ }
+ const data=await readCatalog(peerPlatform==='legacy'?'sessions':'modern');signal?.throwIfAborted();
+ return (data?.courses||[]).filter(row=>valid(row.id)&&sameCourse(course,row)).slice(0,8).map(row=>({id:String(row.id),legacy:peerPlatform==='legacy',title:row.title||row.name}));
+}
+
 // Course links persist; the live lesson is resolved afresh on every switch.
 // No relationship between numeric IDs, stream URLs or login tokens is assumed.
 export function mountLiveLinks({getContext,onSwitch}){
@@ -30,7 +42,7 @@ export function mountLiveLinks({getContext,onSwitch}){
  const platform=()=>getContext().course?.legacy?'legacy':'modern';
  const label=value=>value==='legacy'?'旧站':'新站';
  const say=text=>$('live-platform-status').textContent=text;
- function render(){const context=getContext();$('live-platform-tools').hidden=!context.live;$('switch-live-platform').disabled=busy||(!active&&!other);$('switch-live-platform').textContent=active?'切回'+label(platform())+'直播':'切换到'+label(platform()==='modern'?'legacy':'modern')+'直播';$('active-live-platform').textContent='当前直播来源：'+label(active?(platform()==='modern'?'legacy':'modern'):platform());}
+ function render(){const context=getContext();$('live-platform-tools').hidden=!context.live;$('switch-live-platform').disabled=busy||(!active&&!other);$('switch-live-platform').textContent=active?'切回'+label(platform())+'直播':'切换到'+label(platform()==='modern'?'legacy':'modern')+'直播';$('active-live-platform').textContent=(active?(platform()==='modern'?'legacy':'modern'):platform())==='legacy'?'旧延河':'新延河';}
  function reset(){epoch++;controller?.abort();controller=null;key='';choices=[];other=null;active=false;busy=false;render();}
  async function storePair(peer,context){const current=String(context.course.id),base=context.course.legacy?'legacy':'modern',row={modern:base==='modern'?current:String(peer),legacy:base==='legacy'?current:String(peer)};const saved=await chrome.storage.local.get('player:liveCourseLinks'),links=cleanLinks(saved['player:liveCourseLinks']).filter(item=>item.modern!==row.modern||item.legacy!==row.legacy);links.push(row);await chrome.storage.local.set({'player:liveCourseLinks':links.slice(-100)});}
  async function resolvePeer(ref,signal){
@@ -63,14 +75,13 @@ export function mountLiveLinks({getContext,onSwitch}){
   reset();key=next;const serial=epoch;controller=new AbortController();const peerPlatform=platform()==='modern'?'legacy':'modern';
   say('正在查找同课的另一平台入口…');
   try{
-   const saved=await chrome.storage.local.get('player:liveCourseLinks'),pairs=cleanLinks(saved['player:liveCourseLinks']);
-   choices=pairs.filter(row=>row[platform()]===String(context.course.id)).map(row=>({id:row[peerPlatform],legacy:peerPlatform==='legacy',title:context.course.title}));
-   if(!choices.length){
-    const file=peerPlatform==='legacy'?'legacy-session-index.json':'private-catalog.json';
-    try{const response=await fetch(chrome.runtime.getURL(file));if(response.ok){const data=await response.json();choices=(data.courses||[]).filter(row=>sameCourse(context.course,row)).slice(0,8).map(row=>({id:String(row.id),legacy:peerPlatform==='legacy',title:row.title||row.name}));}}catch{}
+   const signal=controller.signal,saved=await chrome.storage.local.get('player:liveCourseLinks'),pairs=cleanLinks(saved['player:liveCourseLinks']);signal.throwIfAborted();
+   let found=pairs.filter(row=>row[platform()]===String(context.course.id)).map(row=>({id:row[peerPlatform],legacy:peerPlatform==='legacy',title:context.course.title}));
+   if(!found.length){
+    try{const catalogRows=await liveCourseCandidates(context.course,peerPlatform,{signal});signal.throwIfAborted();found=catalogRows;}catch{signal.throwIfAborted();}
    }
-   if(!choices.length){const tabs=await chrome.tabs.query({url:peerPlatform==='legacy'?'https://www.yanhekt.cn/*':'https://aita.yanhekt.cn/*'});for(const tab of tabs.slice(0,8)){try{const ref=parseCourse(tab.url),identity=String(ref.id||ref.liveId||ref.sessionId||'');if(identity&&Boolean(ref.legacy)===(peerPlatform==='legacy')&&!choices.some(row=>String(row.id||row.liveId||row.sessionId)===identity))choices.push({...ref,id:ref.id?String(ref.id):undefined,legacy:Boolean(ref.legacy),title:'已打开的'+label(peerPlatform)+'入口 '+identity});}catch{}}}
-   if(serial!==epoch)return;
+   if(!found.length){const tabs=await chrome.tabs.query({url:peerPlatform==='legacy'?'https://www.yanhekt.cn/*':'https://aita.yanhekt.cn/*'});for(const tab of tabs.slice(0,8)){try{const ref=parseCourse(tab.url),identity=String(ref.id||ref.liveId||ref.sessionId||'');if(identity&&Boolean(ref.legacy)===(peerPlatform==='legacy')&&!found.some(row=>String(row.id||row.liveId||row.sessionId)===identity))found.push({...ref,id:ref.id?String(ref.id):undefined,legacy:Boolean(ref.legacy),title:'已打开的'+label(peerPlatform)+'入口 '+identity});}catch{}}}
+   signal.throwIfAborted();if(serial!==epoch)return;choices=found;
    const select=$('live-course-candidate');select.replaceChildren();if(choices.length>1){const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='多个课程候选，请选择或粘贴具体链接';placeholder.disabled=true;placeholder.selected=true;select.append(placeholder);}for(const [index,row]of choices.entries()){const option=document.createElement('option');option.value=String(index);option.textContent=row.title+' · '+(row.id||row.liveId||row.sessionId);select.append(option);}select.hidden=choices.length<2;
    other=choices.length===1?choices[0]:null;say(choices.length>1?'存在多个课程候选，需要显式选择；也可粘贴具体直播链接。':other?'发现另一平台课程候选；点击切换时核对课程与当前课次。':'可粘贴另一站的课程或直播链接，关联后保留在本浏览器。');render();
   }catch(error){if(serial===epoch&&error.name!=='AbortError')say('可手动粘贴另一平台的课程或直播链接。');}

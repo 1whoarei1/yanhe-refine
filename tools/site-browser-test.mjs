@@ -4,6 +4,8 @@ import {resolve,dirname,join,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {chromium} from 'playwright';
+import {installSignedOutRecoveryFixture} from './signed-out-recovery-fixture.mjs';
+import {installMoodleFileFixture} from './moodle-file-fixture.mjs';
 import {createHash} from 'node:crypto';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),ext=resolve(process.env.EXTENSION_PATH||join(root,'extension'));
@@ -11,10 +13,13 @@ const fixture=resolve(root,'tests/fixtures');
 const futureDeadline=days=>new Date(Date.now()+days*86400000).toISOString();
 const output=join(root,'test-results'),testRoot=await mkdtemp(join(tmpdir(),'yanhe-refine-test-')),profile=join(testRoot,'profile'),testExt=join(testRoot,'extension');
 await cp(ext,testExt,{recursive:true});
+await installMoodleFileFixture(testExt);
+await installSignedOutRecoveryFixture(testExt);
 await rm(join(testExt,'legacy-session-index.json'),{force:true}); // Keep synthetic legacy metadata independent of an optional personal snapshot.
 const testCourses=[{id:102178,title:'计算机视觉',teacher:'裴明涛',term:'2026-2027-1',platform:'modern'},...Array.from({length:20},(_,i)=>({id:70000+i,title:'计算机视觉',teacher:'裴明涛',term:'2024-2025-1',platform:'modern'})),{id:60001,title:'计算机视觉',teacher:'裴明涛',term:'2023-2024-1',platform:'legacy'},{id:73694,title:'计算机视觉',teacher:'张老师',term:'2025-2026-1',platform:'legacy'},{id:73694,title:'计算机视觉',teacher:'裴明涛',term:'2025-2026-2',platform:'modern'}];
 testCourses.push(...Array.from({length:45},(_,i)=>({id:85000+i,title:'分页课程',teacher:'分页老师',term:'2024-2025-1',platform:i%2?'modern':'legacy'})));
 const seed=JSON.stringify({courses:testCourses});await writeFile(join(testExt,'private-catalog.json'),seed);await writeFile(join(testExt,'build-info.json'),JSON.stringify({version:JSON.parse(await readFile(join(ext,'manifest.json'),'utf8')).version,catalog:{count:testCourses.length,sha256:createHash('sha256').update(seed).digest('hex')}}));
+await writeFile(join(testExt,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 await mkdir(output,{recursive:true});
 await mkdir(join(profile,'Default'),{recursive:true});
 await writeFile(join(profile,'Default','Preferences'),JSON.stringify({download:{default_directory:join(testRoot,'downloads'),prompt_for_download:false}}));
@@ -35,7 +40,7 @@ try{
   globalThis.fixtureDownloads.push(options);return download({...options,url:'data:text/plain;base64,c3ludGhldGljIGF0dGFjaG1lbnQ='});
  };});
  report.browserVersion=context.browser()?.version();
- const errors=[],requests=[],unexpected=[];let offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1,submitted=null,submissionPosts=0,lexueConnected=false,crossCourse=false,delayOperatingSystem=false,releaseOperatingSystem,operatingSystemStarted;
+ const errors=[],requests=[],unexpected=[];let enrolledBroken=false,offline=false,lmsOffline=false,roomBroken=false,legacyStatus=1,submitted=null,submissionPosts=0,lexueConnected=false,crossCourse=false,delayOperatingSystem=false,releaseOperatingSystem,operatingSystemStarted;
  context.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='warning')console.log(m.text());});});
  const modernToken='desk-test-opaque-0123456789',oldToken='d'.repeat(32);
  const cookie=encodeURIComponent(`a:2:{i:0;s:6:"_token";i:1;s:${modernToken.length}:"${modernToken}";}`);
@@ -52,6 +57,7 @@ try{
   if(moodleRead)assert.deepEqual(req.postDataJSON().map(r=>r.methodname),['core_course_get_enrolled_courses_by_timeline_classification']);
   assert.ok(['GET','HEAD'].includes(req.method())||moodleRead||(u.hostname==='zy-eclass.bit.edu.cn'&&['/api/uploads','/api/course/activities/2413/submissions'].includes(path))||(u.hostname==='zy-media.bit.edu.cn'&&path==='/upload/file/9001'&&['PUT','OPTIONS'].includes(req.method())),'only named Moodle reads and explicit synthetic coursework writes are allowed');
   const json=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  if(u.hostname==='sso.bit.edu.cn')return route.fulfill({contentType:'text/html',body:'<h1>Login required</h1>'});
   if(u.hostname==='lexue.bit.edu.cn'){
    const html=body=>route.fulfill({status:200,contentType:'text/html',body:`<!doctype html><html><body class="course-${path==='/course/view.php'?u.searchParams.get('id'):'20290'}"><main id="region-main">${body}</main></body></html>`});
    if(!lexueConnected)return html('<button id="loginbtn">Login</button>');
@@ -59,11 +65,11 @@ try{
    if(path==='/my/')return html('<script>window.M={};M.cfg={"wwwroot":"https://lexue.bit.edu.cn","sesskey":"syntheticMoodle123"};</script><h1>旧乐学课程</h1>');
    if(path==='/lib/ajax/service.php')return json([{error:false,data:{courses:[{id:20290,fullname:'旧乐学示例课程',startdate:1790000000,visible:true},...(crossCourse?[[20291,'操作系统'],[20292,'计算机组成与原理'],[20293,'计算机视觉']].map(([id,fullname])=>({id,fullname,startdate:1790000000,visible:true})):[])],nextoffset:crossCourse?4:1}}]);
    if(path==='/course/view.php'&&crossCourse&&u.searchParams.get('id')!=='20290'){const id=u.searchParams.get('id'),title=({'20291':'操作系统','20292':'计算机组成与原理','20293':'计算机视觉'})[id];return html(`<li id="module-${Number(id)+10000}" class="activity modtype_folder"><div class="activityinstance"><a href="/mod/folder/view.php?id=${Number(id)+10000}"><span class="instancename">${title}旧资料</span></a></div></li>`);}
-   if(path==='/course/view.php')return html([[9001,'resource','旧乐学课件'],[9002,'folder','旧乐学文件夹'],[2413,'assign','旧乐学示例作业']].map(([id,type,title])=>`<li id="module-${id}" class="activity modtype_${type}"><div class="activityinstance"><a href="/mod/${type}/view.php?id=${id}"><span class="instancename">${title}<span class="accesshide">文件</span></span></a></div></li>`).join(''));
+   if(path==='/course/view.php')return html([[9001,'resource','实验报告模板'],[9002,'folder','旧乐学文件夹'],[2413,'assign','旧乐学示例作业']].map(([id,type,title])=>`<li id="module-${id}" class="activity modtype_${id===9001?'assign':type}"><div class="activityinstance"><a href="/mod/${type}/view.php?id=${id}"><span class="instancename">${title}<span class="accesshide">文件</span></span></a></div></li>`).join(''));
    if(path==='/mod/resource/view.php')return route.fulfill({status:302,headers:{Location:file('slides.pdf')},body:''});
    if(path==='/mod/folder/view.php')return html(['slides.pdf','helper.pdf','helper.pdf'].map(name=>`<a href="${file(name)}">${name}</a>`).join(''));
    if(path==='/mod/assign/view.php')return html(`<div id="intro"><h3>旧乐学作业正文</h3><p>截止时间2026年11月27日24:00</p><a href="${file('instructions.zip')}">instructions.zip</a><script>window.moodleInjection=true</script></div><table class="submissionstatustable"><tr><th>作业状态</th><td>没有尝试</td></tr></table>`);
-   if(path.startsWith('/pluginfile.php/'))return route.fulfill({status:206,contentType:'application/pdf',headers:{'Content-Range':'bytes 0-0/23','Content-Disposition':'attachment; filename="slides.pdf"'},body:'x'});
+   if(path.startsWith('/pluginfile.php/'))return route.fulfill({status:206,contentType:'text/html',headers:{'Content-Range':'bytes 0-0/23','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent('实验报告模板.doc')},body:'P'});
   }
   if(u.hostname==='zy-media.bit.edu.cn'&&path==='/upload/file/9001'){
    assert.equal(req.method(),'PUT');assert.equal(req.headers()['x-xsrf-token'],undefined);assert.equal(req.headers().cookie,undefined);
@@ -106,6 +112,7 @@ try{
    if(!/^\/(userapi|courseapi|coursesourceapi|vlabpassportapi|spidermaterial|play|fixture)\//.test(path))return route.fulfill({contentType:'text/html',body:nativeHtml});
    if(path==='/userapi/v1/infosimple')return json({code:200,params:{id:123,tenant_id:21,phone:'13000001234',account:'student-fixture'}});
    if(offline&&path.startsWith('/courseapi/'))return route.fulfill({status:503,body:''});
+   if(path==='/vlabpassportapi/v1/account-profile/course'&&enrolledBroken)return route.fulfill({status:503,contentType:'application/json',body:'{}'});
    if(path==='/vlabpassportapi/v1/account-profile/course')return json({code:1000,params:{result:{data:[current,live,iot,...(crossCourse?[{id:910001,title:'操作系统',realname:'老师乙',term_name:'2026-2027-1',zhiyuan_id:20291},{id:910002,title:'计算机组成与原理',realname:'老师丙',term_name:'2026-2027-1',zhiyuan_id:20292}]:[])].map(r=>({Id:r.id,Title:r.title,Teacher:r.realname,TermName:r.term_name,kkxy_name:r.kkxy_name,zhiyuan_id:r.zhiyuan_id})),total:3}}});
    if(path==='/vlabpassportapi/v1/course/term-list')return json({code:1000,params:{list:[{id:1,term_name:'2026-2027-1'}]}});
    if(path==='/vlabpassportapi/v1/user/structures')return json({code:1000,params:{data:[{id:1,display_name:'计算机学院'}]}});
@@ -188,7 +195,7 @@ try{
  await page.getByLabel('课程',{exact:true}).selectOption('modern:21:110118');await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 1 / 1',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();
  assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,3);report.checks.push('single/batch attachment downloads save synthetic bytes through Chromium, deduplicate references and support both LMS and modern resource IDs');
  await visit(page,'https://aita.yanhekt.cn/coursedetail?course_id=102178&tenant_code=21&yh_tab=materials');
- await page.getByLabel('乐学平台',{exact:true}).selectOption('lexue');await page.getByText('旧乐学未连接',{exact:true}).waitFor();
+ await page.getByLabel('乐学平台',{exact:true}).selectOption('lexue');await page.getByText('旧乐学需要登录',{exact:true}).waitFor();
  assert.equal(await page.getByLabel('乐学平台',{exact:true}).locator('option[value="lexue"]').count(),1);assert.equal(await page.getByLabel('关联乐学课程',{exact:true}).isDisabled(),true);assert.equal(await page.getByText('暂无已发布资料',{exact:true}).count(),0);
  lexueConnected=true;await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
  await page.getByLabel('关联乐学课程',{exact:true}).locator('option[value="lexue:20290"]').waitFor({state:'attached'});await page.getByLabel('关联乐学课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).waitFor();
@@ -196,6 +203,10 @@ try{
  report.checks.push('both LMS platforms remain selectable after old-site login failure; returning after login refreshes course options without a full page reload');
  await page.getByRole('link',{name:'资料',exact:true}).click();await page.getByLabel('课程',{exact:true}).locator('option[value="lexue:20290"]').waitFor({state:'attached'});await page.getByLabel('课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).waitFor();assert.equal(await page.locator('.material-row').count(),2);
  await page.getByRole('button',{name:'旧乐学文件夹',exact:true}).click();await page.getByText('helper.pdf',{exact:true}).waitFor();assert.equal(await page.locator('.attachment-row').count(),2);await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'实验报告模板',exact:true}).click();await page.locator('.attachment-name').filter({hasText:'实验报告模板.doc'}).waitFor();
+ assert.equal(await page.locator('.submission-form').count(),0);assert.equal(await page.getByText('PK binary fixture',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'关闭',exact:true}).click();
+ report.checks.push('a synthetic report template with stale assignment CSS remains a material and a binary redirect labeled text/html displays its UTF-8 attachment name without garbled task content');
  await page.getByRole('button',{name:'下载本课全部资料附件'}).click();await page.getByText('已下载 2 / 2',{exact:true}).waitFor({timeout:20000});await page.getByRole('button',{name:'关闭',exact:true}).click();assert.equal((await worker.evaluate(()=>globalThis.fixtureDownloads)).length,5);
  await page.getByRole('link',{name:'待办',exact:true}).click();await page.getByLabel('课程',{exact:true}).selectOption('lexue:20290');await page.getByRole('button',{name:'旧乐学示例作业',exact:true}).click();await page.getByRole('heading',{name:'旧乐学作业正文',exact:true}).waitFor();assert.equal(await page.locator('.submission-form').count(),0);assert.equal(await page.getByRole('link',{name:'在旧乐学提交',exact:true}).count(),1);assert.equal(await page.locator('.task-attachments .attachment-row').count(),1);assert.equal(await page.evaluate(()=>window.moodleInjection),undefined);
  await page.getByRole('button',{name:'下载',exact:true}).click();await page.getByRole('button',{name:'已下载',exact:true}).waitFor({timeout:20000});await page.setViewportSize({width:375,height:900});assert.equal(await page.locator('#resources-dialog').evaluate(e=>e.scrollWidth>e.clientWidth+1),false);await page.screenshot({path:join(output,'site-lexue-task-mobile.png'),fullPage:true});await page.setViewportSize({width:1440,height:1000});await page.getByRole('button',{name:'关闭',exact:true}).click();
@@ -255,10 +266,15 @@ try{
  // Hold an OS response, switch courses in the SPA, then release the old request.
  await visit(page,'https://aita.yanhekt.cn/coursedetail?course_id=910001&tenant_code=21&yh_tab=materials&yh_source=lms');await page.getByRole('button',{name:'操作系统新资料',exact:true}).waitFor();
  delayOperatingSystem=true;const started=new Promise(resolve=>operatingSystemStarted=resolve);await page.getByRole('button',{name:'重新读取新乐学',exact:true}).click();await started;
+ const cancelledMaterial=context.waitForEvent('requestfailed',{predicate:r=>new URL(r.url()).pathname==='/api/course/20291/courseware-activities'});
  await page.getByRole('link',{name:'课程',exact:true}).first().click();await page.locator('[data-course-key="modern:21:102178"] .course-title').click();await watchFrame(page);await page.getByRole('tab',{name:'资料与任务',exact:true}).click();await page.getByRole('button',{name:'图像增强',exact:true}).waitFor();
- const completed=context.waitForEvent('requestfinished',{predicate:r=>new URL(r.url()).pathname==='/api/course/20291/courseware-activities'});delayOperatingSystem=false;releaseOperatingSystem();await completed;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ delayOperatingSystem=false;releaseOperatingSystem();await cancelledMaterial;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  assert.equal(await page.getByRole('button',{name:'操作系统新资料',exact:true}).count(),0);assert.equal(await page.getByLabel('关联乐学课程',{exact:true}).inputValue(),'20290');
- report.checks.push('a delayed previous-course response cannot replace the current course materials or selection');
+ report.checks.push('leaving a course aborts its delayed material fetch and cannot replace the next course materials or selection');
+ enrolledBroken=true;await visit(page,'https://aita.yanhekt.cn/workbenchAi?tenant_code=21');
+ await page.locator('.schedule .lesson').first().waitFor();assert.equal(await page.locator('.schedule .lesson').count(),2);
+ assert.equal(await page.locator('.today-courses').count(),0);enrolledBroken=false;
+ report.checks.push('today schedule remains visible when the independent enrolled-course endpoint fails');
  const stored=JSON.stringify(await worker.evaluate(()=>chrome.storage.local.get(null)));assert.ok(!/desk-test-opaque|13000001234|video_fixture/.test(stored));assert.equal(await page.evaluate(()=>localStorage.getItem('desk:favorites')),null);assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);report.checks.push('no page exceptions, real platform writes, stored credentials or private data in the host localStorage');report.ok=true;
 }catch(error){report.ok=false;report.error=String(error.stack).replace(/https?:\/\/\S+/g,'[url]');process.exitCode=1;if(page){await page.screenshot({path:join(output,'site-failed.png'),fullPage:true}).catch(()=>{});report.visible=await page.locator('body').innerText().catch(()=>null);}report.players=await Promise.all(context.pages().flatMap(p=>p.frames()).filter(f=>f.url().includes('/watch/player.html')).map(f=>f.evaluate(()=>({status:document.getElementById('message')?.textContent,playback:document.getElementById('playback-status')?.textContent,stage:document.getElementById('stage-label')?.textContent,lectures:document.getElementById('lecture-list')?.textContent})).catch(()=>null)));}
 finally{if(context)await context.close();if(dirname(resolve(testRoot))===resolve(tmpdir())&&basename(testRoot).startsWith('yanhe-refine-test-'))await rm(testRoot,{recursive:true,force:true});await writeFile(join(output,'site-browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));}

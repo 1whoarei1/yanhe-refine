@@ -45,11 +45,11 @@ main[data-page="course"]{padding:24px clamp(18px,1.6vw,48px) 28px}.course-headin
 .connection-state{display:flex;align-items:center;gap:5px;color:var(--connection-color);font-size:12px}
 .connection-marker{display:inline-flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px;height:14px;box-sizing:border-box;font-weight:700;line-height:1}
 .connection-entry[data-state="connected"]{--connection-color:#226649;background:#f2faf5;border-color:#cee5d8}
-.connection-entry[data-state="login"]{--connection-color:#9a5700;background:#fff9ed;border-color:#efdfbc}
+.connection-entry:is([data-state="login"],[data-state="verification"]){--connection-color:#9a5700;background:#fff9ed;border-color:#efdfbc}
 .connection-entry[data-state="error"]{--connection-color:#b43232;background:#fff5f5;border-color:#f0d2d2}
 .connection-entry[data-state="checking"]{--connection-color:#007b83;background:#eef9fa;border-color:#c7e6e8}
 .connection-entry[data-state]:hover{border-color:var(--connection-color)}
-.connection-entry:is([data-state="login"],[data-state="error"]) .connection-marker{border:1.5px solid currentColor;border-radius:50%;font-size:10px}
+.connection-entry:is([data-state="login"],[data-state="verification"],[data-state="error"]) .connection-marker{border:1.5px solid currentColor;border-radius:50%;font-size:10px}
 .connection-entry[data-state="checking"] .connection-marker{border:2px solid #b9dfe1;border-top-color:currentColor;border-radius:50%;animation:connection-spin .8s linear infinite}
 @keyframes connection-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.connection-entry[data-state="checking"] .connection-marker{animation:none}}

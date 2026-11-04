@@ -1,3 +1,4 @@
+import {mountTranscriptList} from './transcript-list.js';
 import {mountVideoCaptions} from './captions.js';
 import {mountPlayerControls} from './player-controls.js';
 import {mountMultiview} from './multiview.js';
@@ -27,7 +28,7 @@ const state = { course: null, selected: null, info: null, view: 'screen', subtit
 let playbackApi=null;
 const getMediaApi=()=>playbackApi||api;
 const timely=new LiveFrameFollower(video,{active:()=>isLive()&&state.attached,onUpdate:({latest})=>{const text=latest?'最新缓存帧':'正在更新画面';if($('timely-status').textContent!==text)$('timely-status').textContent=text;}});
-const multi=mountMultiview({video,getApi:getMediaApi,getInfo:()=>state.info,getView:()=>state.view,getHls:()=>state.hls,isLive,isAttached:()=>state.attached,isConnecting:()=>state.connecting,getTimely:()=>timely.enabled,blockedViews:state.blockedViews,onStatus:playbackStatus,onBlocked:audioBlocked});
+const multi=mountMultiview({video,getApi:getMediaApi,getInfo:()=>state.info,getView:()=>state.view,onViewChange:selectView,getHls:()=>state.hls,isLive,isAttached:()=>state.attached,isConnecting:()=>state.connecting,getTimely:()=>timely.enabled,blockedViews:state.blockedViews,onStatus:playbackStatus,onBlocked:audioBlocked});
 const updateDual=()=>multi.refresh();
 $('copy-playback-diagnostics').addEventListener('click',async()=>{
  let tabAudio=null;try{const tab=await chrome.tabs.getCurrent();tabAudio={muted:tab?.mutedInfo?.muted??null,reason:tab?.mutedInfo?.reason||null,audible:tab?.audible??null};}catch{}
@@ -99,21 +100,27 @@ function resetSelection() {
   state.blockedViews.clear(); state.sourceNote = '';
   $('stage-empty').classList.remove('hidden'); $('stage-label').textContent = '选择课次';
   $('stage-detail').textContent = '';
-  $('play').disabled = true; $('retry').disabled = true; $('retry').textContent = '重新连接';
+  $('play').disabled = true;
   $('lecture-title').textContent = '尚未选择课次'; $('duration').textContent = '';
-  for (const view of views) { $(view).disabled = true; $(view).setAttribute('aria-pressed','false'); }
   $('timely-mode').hidden=true;$('timely-status').hidden=true;$('control-volume').removeAttribute('data-audio-blocked');$('control-volume').removeAttribute('data-play-blocked');
-  $('student').hidden = true; $('go-live').hidden = true; $('go-live').disabled = true; $('speed').disabled = false;
+  $('go-live').hidden = true; $('go-live').disabled = true; $('speed').disabled = false;
   document.querySelector('.workspace').classList.remove('live-mode');
   $('subtitle-search').value = ''; $('subtitle-search').disabled = true; $('subtitle-count').textContent = '—';
   cancelAnimationFrame(state.lyricFrame); state.lyricFrame = 0; state.followLyrics = true; state.activeCue = -1;
   $('show-captions').disabled = true; $('return-sync').hidden = true;
   $('subtitle-mode').textContent = '随播放滚动'; $('subtitle-list').classList.remove('searching');
   $('subtitle-time').textContent = '0:00'; $('current-caption').textContent = '';
-  $('subtitle-list').replaceChildren();
+  transcript.setRows([],{emptyText:''});
   updateCalibration(); $('calibration-status').textContent = '';
 }
 function textNode(tag, text, className) { const node = document.createElement(tag); node.textContent = text; if (className) node.className = className; return node; }
+const transcript=mountTranscriptList({list:$('subtitle-list'),createRow:index=>{
+ const row=state.subtitles[index],original=state.rawSubtitles[index]||row;
+ const button=document.createElement('button');button.type='button';button.className='subtitle-item';button.dataset.index=String(index);button.dataset.start=String(row.start);
+ button.title=`原始 ${subtitleClock(original.start)} · 播放时间 ${subtitleClock(row.start)}；点击${state.calibrating?'对齐当前播放时间':'跳转'}`;
+ button.append(textNode('time',subtitleClock(row.start)),textNode('span',row.text));
+ if(index===state.activeCue){button.classList.add('active');button.setAttribute('aria-current','true');}return button;
+}});
 function renderLectures() {
   const list = $('lecture-list'); list.replaceChildren();
   const rows = state.filter === 'live' ? state.course.lives || [] : state.course.replays;
@@ -140,18 +147,14 @@ function cuePosition(time) {
 }
 function updateLyricMode() {
   const searching = Boolean($('subtitle-search').value.trim());
-  $('subtitle-mode').textContent = searching ? `搜索结果 ${$('subtitle-list').querySelectorAll('.subtitle-item').length} 段` : state.followLyrics ? '随播放滚动' : '正在浏览字幕';
+  $('subtitle-mode').textContent = searching ? `搜索结果 ${transcript.count} 段` : state.followLyrics ? '随播放滚动' : '正在浏览字幕';
   $('return-sync').hidden = !state.subtitles.length || (!searching && state.followLyrics);
 }
 function centerLyric(smooth = true) {
   if (!state.followLyrics || $('subtitle-search').value.trim()) return;
   const list = $('subtitle-list');
   const { anchor } = cuePosition(state.attached ? video.currentTime : state.resume);
-  const row = list.querySelector(`[data-index="${anchor}"]`);
-  if (!row || !list.clientHeight) return;
-  const top = Math.max(0,Math.min(list.scrollHeight - list.clientHeight,row.offsetTop + row.offsetHeight / 2 - list.clientHeight / 2));
-  if (Math.abs(top - list.scrollTop) < 2) return;
-  list.scrollTo({ top, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'instant' });
+  if(!list.clientHeight)return;transcript.scrollToIndex(anchor,{smooth});
 }
 function scheduleLyricCenter(smooth = true) {
   cancelAnimationFrame(state.lyricFrame);
@@ -159,7 +162,7 @@ function scheduleLyricCenter(smooth = true) {
 }
 function browseLyrics() {
   if (!state.subtitles.length || !state.followLyrics) return;
-  state.followLyrics = false; cancelAnimationFrame(state.lyricFrame); state.lyricFrame = 0;
+  state.followLyrics = false;transcript.cancelCenter(); cancelAnimationFrame(state.lyricFrame); state.lyricFrame = 0;
   // Stop a pending smooth scroll before the user's wheel or scrollbar takes over.
   $('subtitle-list').scrollTo({ top: $('subtitle-list').scrollTop, behavior: 'instant' });
   updateLyricMode();
@@ -214,26 +217,15 @@ function alignSubtitle(index) {
 }
 function renderSubtitles() {
   const search = $('subtitle-search').value.trim().toLocaleLowerCase();
-  const fragment = document.createDocumentFragment(); let visible = 0;
-  for (let index = 0; index < state.subtitles.length; index++) {
-    const row = state.subtitles[index];
-    if (search && !row.text.toLocaleLowerCase().includes(search)) continue;
-    const button = document.createElement('button'); button.type = 'button'; button.className = 'subtitle-item'; button.dataset.index = String(index); button.dataset.start = String(row.start);
-    const original = state.rawSubtitles[index] || row;
-    button.title = `原始 ${subtitleClock(original.start)} · 播放时间 ${subtitleClock(row.start)}；点击${state.calibrating ? '对齐当前播放时间' : '跳转'}`;
-    button.append(textNode('time',subtitleClock(row.start)),textNode('span',row.text));
-    button.addEventListener('click',() => seekSubtitle(row,index));
-    fragment.append(button); visible++;
-  }
-  if (!visible) fragment.append(textNode('p', search ? '没有找到匹配字幕。' : '暂无字幕','empty'));
-  const list = $('subtitle-list'); list.classList.toggle('searching',Boolean(search)); list.replaceChildren(fragment); list.scrollTop = 0;
+  const indices=[];for(let index=0;index<state.subtitles.length;index++)if(!search||state.subtitles[index].text.toLocaleLowerCase().includes(search))indices.push(index);
+  const list=$('subtitle-list');list.classList.toggle('searching',Boolean(search));transcript.setRows(indices,{emptyText:search?'没有找到匹配字幕。':'暂无字幕'});
   state.activeCue = -1; updateActiveCue(false); updateLyricMode(); scheduleLyricCenter(false);
 }
 function updateActiveCue(center = true) {
   const time = state.attached ? video.currentTime : state.resume;
   const { index } = cuePosition(time);
-  $('subtitle-time').textContent = clock(time);
-  $('current-caption').textContent = state.subtitles.length && state.attached && index < 0 ? '此处无字幕' : '';
+  const stamp=clock(time);if($('subtitle-time').textContent!==stamp)$('subtitle-time').textContent=stamp;
+  const gap=state.subtitles.length&&state.attached&&index<0?'此处无字幕':'';if($('current-caption').textContent!==gap)$('current-caption').textContent=gap;
   if (state.activeCue === index) return;
   const previous = $('subtitle-list').querySelector('.active'); previous?.classList.remove('active'); previous?.removeAttribute('aria-current');
   const current = $('subtitle-list').querySelector(`[data-index="${index}"]`); current?.classList.add('active'); current?.setAttribute('aria-current','true'); state.activeCue = index;
@@ -248,14 +240,7 @@ function attachCaptions() {
 }
 function syncCaptionMode(){for(const node of video.querySelectorAll('track'))node.track.mode=$('show-captions').checked?(document.pictureInPictureElement===video?'showing':'hidden'):'disabled';captions.update();}
 function updateViews() {
-  $('audio-label').hidden=!Object.keys(state.info?.streams||{}).length;
   updateDual();
-  for (const view of views) {
-    if (view === 'student') $(view).hidden = !state.info?.streams.student;
-    $(view).disabled = !state.info?.streams[view] || state.blockedViews.has(view);
-    $(view).textContent = `${viewName(view)}${state.blockedViews.has(view) ? '（源失效）' : ''}`;
-    $(view).setAttribute('aria-pressed',String(state.view === view));
-  }
 }
 
 async function loadCourse(force=false) {
@@ -309,7 +294,6 @@ async function selectLecture(lecture) {
   if (!state.course) return;
   resetSelection(); const sequence = ++state.sequence; state.controller = new AbortController(); const signal = state.controller.signal;
   state.selected = lecture; state.resume = 0; state.lastRecovery = 0; state.lastSaved = 0;
-  $('retry').disabled = false;
   document.querySelectorAll('.lecture-item').forEach(button => { button.classList.toggle('selected',button.dataset.id === lecture.id); button.setAttribute('aria-current',String(button.dataset.id === lecture.id)); });
   $('lecture-title').textContent = lecture.title; $('stage-label').textContent = '正在读取播放信息'; $('stage-detail').textContent = '';
   playbackStatus('正在读取本课次信息…');
@@ -325,12 +309,11 @@ async function selectLecture(lecture) {
     document.querySelector('.workspace').classList.toggle('live-mode',Boolean(liveContext()));
     $('speed').disabled = Boolean(liveContext()); $('go-live').hidden = !isLive();updateTimelyControls();void liveLinks.refresh();
     if (liveContext()) {
-      $('retry').textContent = '刷新课次';
-      $('duration').textContent = liveLabels[info.mode]; $('retry').disabled = false;
+      $('duration').textContent = liveLabels[info.mode];
       $('subtitle-list').replaceChildren(textNode('p','直播暂无字幕','empty'));
       if (!isLive() || !Object.keys(info.streams).length) {
         $('stage-label').textContent = info.mode === 'upcoming' ? '直播尚未开始' : info.mode === 'ended' ? '直播已结束' : '直播源暂未就绪';
-        $('stage-detail').textContent = '点击刷新课次重试'; playbackStatus($('stage-label').textContent); updateViews(); return;
+        $('stage-detail').textContent = '请刷新页面后重试'; playbackStatus($('stage-label').textContent); updateViews(); return;
       }
       state.view = info.streams.classroom ? 'classroom' : Object.keys(info.streams)[0];
       video.playbackRate = 1; state.resume = 0;
@@ -345,7 +328,7 @@ async function selectLecture(lecture) {
     state.view = info.streams[saved?.view] ? saved.view : state.course.legacy && info.streams.classroom ? 'classroom' : info.streams.screen ? 'screen' : 'classroom';
     state.offsets = {screen:savedOffset(screenOffset),classroom:savedOffset(classroomOffset)};
     state.resume = Math.min(Math.max(0,Number(saved?.time) || 0), Math.max(0,info.duration - 1));
-    $('duration').textContent = `时长 ${clock(info.duration)}`; $('play').disabled = false; $('retry').disabled = false; updateViews();
+    $('duration').textContent = `时长 ${clock(info.duration)}`; $('play').disabled = false; updateViews();
     $('stage-label').textContent = `${viewName(state.view)}已就绪`;
     $('stage-detail').textContent = state.resume > 1 ? `上次 ${clock(state.resume)}` : '';
     $('play').textContent = state.resume > 1 ? '继续观看' : '播放回放'; playbackStatus('待播放');
@@ -429,7 +412,7 @@ async function connectPlayback(time = state.resume, { refresh = false, play = tr
       state.sourceNote = `${failure}，已切换${viewName(alternate)}。`; updateViews();
       playbackStatus(state.sourceNote);
     }
-    const url = sourceApi.sign(source); state.lastSigned = Date.now(); state.attached = true; attachCaptions(); updateCalibration(); $('retry').textContent = '重新连接';
+    const url = sourceApi.sign(source); state.lastSigned = Date.now(); state.attached = true; attachCaptions(); updateCalibration();
     if (isLive() && new URL(source).pathname.toLowerCase().endsWith('.flv')) {
       if (!globalThis.mpegts?.isSupported()) throw new Error('当前浏览器不支持此 FLV 直播。');
       mpegts.LoggingControl.enableAll = false;
@@ -449,7 +432,7 @@ async function connectPlayback(time = state.resume, { refresh = false, play = tr
     }
     else if (globalThis.Hls?.isSupported()) {
       const mediaApi=sourceApi, mediaSignal=state.controller.signal;
-      const hls = new Hls({ enableWorker: false, lowLatencyMode:isLive(), liveSyncDurationCount:3, liveMaxLatencyDurationCount:8,
+      const hls = new Hls({ enableWorker:true,workerPath:new URL('vendor/hls.worker.js',import.meta.url).href, lowLatencyMode:isLive(), liveSyncDurationCount:3, liveMaxLatencyDurationCount:8,
         maxBufferLength: 20, maxMaxBufferLength: 30, backBufferLength: 15, maxBufferSize: 32 * 1024 * 1024,
         async xhrSetup(xhr, requestUrl) { await mediaApi.prepareMedia?.(mediaSignal,requestUrl); mediaSignal.throwIfAborted();xhr.open('GET',mediaApi.sign(requestUrl),true); xhr.withCredentials = true; } });
       state.hls = hls;multi.observePrimary({hls});
@@ -476,13 +459,12 @@ function handleMediaError(kind, status = 0) {
   if (kind === 'network' && Date.now() - state.lastRecovery > 30000) {
     state.lastRecovery = Date.now(); void connectPlayback(video.currentTime || state.resume,{ refresh: true, automatic: true }); return;
   }
-  playbackStatus(kind === 'decode' ? '浏览器未能识别此视频源。可能是编码不支持或资源响应异常，请切换画面或重新连接。' :
-    `视频连接失败${status ? `（HTTP ${status}）` : ''}。请检查校园网 / VPN、代理绕过，再点击重新连接。`,true);
+  playbackStatus(kind === 'decode' ? '浏览器未能识别此视频源。可能是编码不支持或资源响应异常，请切换画面或刷新页面。' :
+    `视频连接失败${status ? `（HTTP ${status}）` : ''}。请检查校园网 / VPN、代理绕过，再刷新页面重试。`,true);
 }
 
 $('course-form').addEventListener('submit',event => { event.preventDefault(); void loadCourse(true); });
 $('play').addEventListener('click',() => { state.lastRecovery = 0; void connectPlayback(state.resume); });
-$('retry').addEventListener('click',() => { state.lastRecovery = 0; if (state.selected && (!state.info || (liveContext() && !state.attached))) void selectLecture(state.selected); else void connectPlayback(video.currentTime || state.resume,{refresh:true}); });
 for (const filter of ['replay','live']) $(`filter-${filter}`).addEventListener('click',() => { state.filter = filter; if (state.course) renderLectures(); });
 $('refresh-list').addEventListener('click',() => { if (state.courseLoading) return; void loadCourse(true); });
 $('go-live').addEventListener('click',() => {
@@ -491,14 +473,14 @@ $('go-live').addEventListener('click',() => {
   if (target != null) { video.currentTime = target; void video.play().catch(() => playbackStatus('请点击视频播放按钮')); }
   else void connectPlayback(0,{refresh:true});
 });
-for (const view of views) $(view).addEventListener('click',() => {
-  if (!state.info?.streams[view]) return;
+function selectView(view) {
+  if (!state.info?.streams[view] || state.blockedViews.has(view)) return;
   if(state.view===view)return;
   const time = video.currentTime || state.resume, playing = state.attached && !video.paused, attached = state.attached;
   saveProgress(true);if(attached)state.connecting=true; state.view = view; state.calibrating = false; $('calibration-status').textContent = ''; if (!liveContext()) applyTimeline(); updateViews();
   if (attached) void connectPlayback(time,{play:playing});
   else { $('stage-label').textContent = `${viewName(view)}已就绪`; }
-});
+}
 $('speed').addEventListener('change',() => { video.playbackRate = Number($('speed').value); });
 $('platform').addEventListener('change',()=> { $('site-link').href=$('platform').value==='legacy'?'https://www.yanhekt.cn/':'https://aita.yanhekt.cn/'; });
 $('subtitle-search').addEventListener('input',() => { state.followLyrics = !$('subtitle-search').value.trim(); renderSubtitles(); });
@@ -513,6 +495,7 @@ $('align-current').addEventListener('click',() => {
 });
 $('cancel-align').addEventListener('click',() => { state.calibrating = false; updateCalibration(); $('calibration-status').textContent = ''; });
 const lyricList = $('subtitle-list');
+lyricList.addEventListener('click',event=>{const item=event.target.closest('.subtitle-item');if(!item||!lyricList.contains(item))return;const index=Number(item.dataset.index),row=state.subtitles[index];if(row)seekSubtitle(row,index);});
 lyricList.addEventListener('wheel',event => { if (event.deltaY) browseLyrics(); },{passive:true});
 lyricList.addEventListener('touchstart',browseLyrics,{passive:true});
 lyricList.addEventListener('pointerdown',event => { if (event.target === lyricList) browseLyrics(); });

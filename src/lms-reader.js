@@ -2,7 +2,7 @@ import {lmsCourses,homeworkRows,materialRows,resourceRows,homeworkDetail,submiss
 export const LMS_ORIGIN='https://zy-eclass.bit.edu.cn';
 export function numeric(value){if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');return String(value);}
 export class LmsReader {
- constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.activities=new Map();this.termCache=null;this.termFlight=null;}
+ constructor(fetcher=globalThis.fetch.bind(globalThis)){this.fetcher=fetcher;this.owned=null;this.courseTerms=new Map();this.activities=new Map();this.termCache=null;this.termFlight=null;}
  async termCatalog(yearIds=[],signal){
   if(this.termCache&&Date.now()-this.termCache.at<300000)return this.termCache.data;
   if(this.termFlight)return this.termFlight;
@@ -16,7 +16,8 @@ export class LmsReader {
   })().finally(()=>this.termFlight=null);return this.termFlight;
  }
  async response(path,options={}){
-  const response=await this.fetcher(LMS_ORIGIN+path,{credentials:'include',redirect:'error',cache:'no-store',signal:AbortSignal.timeout(20000),...options});
+  const response=await this.fetcher(LMS_ORIGIN+path,{credentials:'include',redirect:!options.method||options.method==='GET'?'manual':'error',cache:'no-store',signal:AbortSignal.timeout(20000),...options});
+  if(response.type==='opaqueredirect'||response.status===401){await response.body?.cancel();throw Object.assign(new Error('请登录新乐学'),{code:'AUTH_REQUIRED'});}
   if(!response.ok){const e=new Error(`新乐学返回 HTTP ${response.status}`);e.status=response.status;throw e;}return response;
  }
  async get(path,timeout=12000,signal){
@@ -50,6 +51,9 @@ export class LmsReader {
  }
  async read({kind,id,courseId,page=1,force=false,signal}){
   signal?.throwIfAborted();
+  if(kind==='connection'){
+   const body=await this.get('/api/my-courses',12000,signal);if(!Array.isArray(body.courses||body.data?.courses))throw new Error('请登录新乐学');return {connected:true};
+  }
   if(kind==='courses'){
    const body=await this.get('/api/my-courses',12000,signal);if(!Array.isArray(body.courses||body.data?.courses))throw new Error('请登录新乐学');
    if(force)this.termCache=null;
@@ -57,7 +61,7 @@ export class LmsReader {
     const yearIds=(body.courses||body.data.courses).map(row=>String(row.academic_year?.id??row.academic_year_id??(typeof row.academic_year!=='object'?row.academic_year:'')));
     rows=lmsCourses(body,await this.termCatalog(yearIds,signal));
    }
-   signal?.throwIfAborted();this.owned=new Set(rows.map(r=>r.id));return {rows,termMetadataVersion:3,unresolvedTerms:rows.filter(row=>!row.term).length};
+   signal?.throwIfAborted();this.owned=new Set(rows.map(r=>r.id));this.courseTerms=new Map(rows.map(r=>[r.id,r.term]));return {rows,termMetadataVersion:3,unresolvedTerms:rows.filter(row=>!row.term).length};
   }
   numeric(id);
   if(['resources','task'].includes(kind)){
@@ -65,7 +69,7 @@ export class LmsReader {
    const entry=await this.activity(courseId,id,signal);
    if(kind==='resources')return {rows:resourceRows(await this.get(`/api/activities/${id}/resources`,12000,signal))};
    if(entry.type!=='homework')throw new Error('不是作业活动');
-   const detail=homeworkDetail(await this.get(`/api/activities/${id}`,12000,signal),courseId);
+   const detail=homeworkDetail(await this.get(`/api/activities/${id}`,12000,signal),courseId,this.courseTerms.get(String(courseId)));
    let history;try{history=await this.submissions(courseId,id,detail,signal);}
    catch{signal?.throwIfAborted();return {...detail,submissions:[],historyError:'提交记录暂未读取，请刷新后再提交',canSubmit:false,submitReason:'提交记录暂未读取，请刷新后再提交'};}
    return {...detail,submissions:history.rows,groupName:history.groupName,canSubmit:detail.canSubmit&&history.inGroup,
@@ -75,7 +79,7 @@ export class LmsReader {
   if(kind==='homework'){
    const n=Math.max(1,Math.min(100,Number(page)||1));
    const [body,status]=await Promise.all([this.get(`/api/courses/${id}/homework-activities?page=${n}`,12000,signal),this.get(`/api/course/${id}/homework/submission-status`,4000,signal).catch(()=>({}))]);signal?.throwIfAborted();
-   const rows=homeworkRows(body,status,id);rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows,page:Number(body.page)||n,pages:Number(body.pages)||1};
+   const rows=homeworkRows(body,status,id,this.courseTerms.get(String(id)));rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows,page:Number(body.page)||n,pages:Number(body.pages)||1};
   }
   if(kind==='materials'){
    const rows=materialRows(await this.get(`/api/course/${id}/courseware-activities`,12000,signal),id);rows.forEach(r=>this.activities.set(r.id,String(id)));return {rows};

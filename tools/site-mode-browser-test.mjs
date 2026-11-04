@@ -7,6 +7,7 @@ import {chromium} from 'playwright';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),temp=await mkdtemp(join(tmpdir(),'yanhe-mode-test-')),extension=join(temp,'extension'),profile=join(temp,'profile'),output=join(root,'test-results');
 await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),extension,{recursive:true});await writeFile(join(extension,'build-info.json'),JSON.stringify({version:JSON.parse(await readFile(join(root,'package.json'),'utf8')).version,catalog:null}));
+await writeFile(join(extension,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 await mkdir(output,{recursive:true});
 const report={version:JSON.parse(await readFile(join(root,'package.json'),'utf8')).version,mode:'isolated Edge; synthetic native pages; no real platform requests',checks:[]};let context;
 const html='<!doctype html><html><head><meta charset="utf-8"></head><body><h1>原站功能</h1><input aria-label="原站输入"><a href="https://aita.yanhekt.cn/workbenchAi?tenant_code=21">原站入口</a><a href="https://aita.yanhekt.cn/coursedetail?course_id=110118" target="_blank">新标签课程</a><a href="https://www.yanhekt.cn/home">旧站入口</a><a href="https://aita.yanhekt.cn/searchContent?title=视觉">新版入口</a><button id="spa" onclick="history.pushState({},\'\',\'/personal/#/myStudy/myCourse\')">原站内部导航</button></body></html>';

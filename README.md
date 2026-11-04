@@ -2,9 +2,9 @@
 
 在新版、旧版延河课堂中，一站查看课程、直播、回放、资料和待办。支持 Edge / Chrome。
 
-[下载插件 1.0.2](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
+[下载插件 1.10](https://github.com/1whoarei1/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/1whoarei1/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
 
-**1.0.2 是重要更新，强烈推荐更新。** 修复部分旧版往年课提示“课程已过期”后无法播放的问题。
+**1.10 推荐更新。** 课程目录免导入，播放设置更简洁，改善作业读取、内存占用和滚动体验。
 
 ## 功能
 
@@ -44,14 +44,11 @@
 
 更新时可在设置中「检查更新」，下载新版后替换原扩展文件，重新加载扩展，再刷新课堂页面。使用乐学资料与待办前，请分别登录新乐学和旧乐学。
 
-## 导入课程目录
+## 课程目录
 
-在「设置 → 导入课程表」中分别导入压缩包内的两份目录：
+新版课程和旧版课次目录随插件内置，首次打开即可使用，无需手动导入。观看仍需登录课堂。
 
-- **新版**：`课程目录/课程目录.json`，收录 **27,369 门课程**。
-- **旧版**：`课程目录/旧版课次目录.json`，收录 **59,602 门课程、853,644 个课次**（2026-10-30 快照）。
-
-已导入相同目录的用户无需重复导入。观看仍需登录课堂。
+设置中仍可手动导入更新目录。插件更新会保留已导入的更新数据。
 
 ## 致谢
 

@@ -8,6 +8,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),pkg=JSON.parse(
 const scratch=await mkdtemp(join(tmpdir(),'yanhe-index-test-')),ext=join(scratch,'extension'),out=join(root,'test-results');await mkdir(out,{recursive:true});await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),ext,{recursive:true});
 await rm(join(ext,'legacy-session-index.json'),{force:true}); // Exercise missing-catalog guidance before importing a local snapshot.
 if(refine)await writeFile(join(ext,'build-info.json'),JSON.stringify({version:pkg.version,catalog:null}));
+await writeFile(join(ext,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 const report={version:pkg.version,mode:'isolated Edge; local catalog import and synthetic school APIs; no online index or media requests',checks:[]};let context,page;
 try{
  context=await chromium.launchPersistentContext(join(scratch,'profile'),{executablePath:process.env.BROWSER_EXECUTABLE||'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`],viewport:{width:1440,height:1000}});

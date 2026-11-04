@@ -17,6 +17,14 @@ await writeFile(join(out,'player.html'),'<!doctype html><html lang="zh-CN"><meta
 const pkg=JSON.parse(await readFile(join(root,'package.json'),'utf8')),info={version:pkg.version,catalog:null};
 try{const raw=JSON.parse(await readFile(join(root,'local-data/catalog.json'),'utf8'));const courses=raw.courses.filter(row=>row.platform==='modern');const data=Buffer.from(JSON.stringify({schema:1,courses}));info.catalog={count:courses.length,sha256:createHash('sha256').update(data).digest('hex')};await writeFile(join(out,'private-catalog.json'),data);}catch(e){if(e.code!=='ENOENT')throw e;}
 await writeFile(join(out,'build-info.json'),JSON.stringify(info,null,2));
+const bundled={schema:1,catalogs:{}};
+for(const [kind,file,path] of [['modern','release-catalog.json','课程目录/课程目录.json'],['sessions','release-session-index.json','课程目录/旧版课次目录.json']]){
+ try{const bytes=await readFile(join(root,'local-data',file)),snapshot=JSON.parse(bytes),date=snapshot.generatedAt||snapshot.snapshot_date;
+  if(!Date.parse(date))throw new Error('Public catalog needs a snapshot date: '+file);
+  await mkdir(dirname(join(out,path)),{recursive:true});await writeFile(join(out,path),bytes);bundled.catalogs[kind]={path,date};
+ }catch(error){if(error.code!=='ENOENT')throw error;await rm(join(out,path),{force:true});}
+}
+await writeFile(join(out,'bundled-catalogs.json'),JSON.stringify(bundled,null,2));
 const table=Array.from({length:256},(_,n)=>{for(let k=0;k<8;k++)n=n&1?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
 function chunk(type,data){const t=Buffer.from(type),n=Buffer.alloc(4);n.writeUInt32BE(data.length);let c=0xffffffff;for(const b of Buffer.concat([t,data]))c=table[(c^b)&255]^(c>>>8);const crc=Buffer.alloc(4);crc.writeUInt32BE((c^0xffffffff)>>>0);return Buffer.concat([n,t,data,crc]);}
 await mkdir(join(out,'icons'),{recursive:true});

@@ -20,7 +20,7 @@ test('expanded course labels in the screenshot format resolve without extra dict
 test('55 ID-only courses hydrate with two shared metadata requests; refresh invalidates their cache',async()=>{
  const requests=[];
  const reader=new LmsReader(async(url,options)=>{
-  const u=new URL(url);requests.push(u.pathname);assert.equal(options.credentials,'include');assert.equal(options.redirect,'error');assert.ok(!options.method||options.method==='GET');
+  const u=new URL(url);requests.push(u.pathname);assert.equal(options.credentials,'include');assert.equal(options.redirect,'manual');assert.ok(!options.method||options.method==='GET');
   if(u.pathname==='/api/my-courses')return response({courses});
   if(u.pathname==='/api/my-academic-years')return response(years);
   if(u.pathname==='/api/my-semesters-all')return response(semesters);

@@ -1,8 +1,9 @@
-const labels={unknown:['尚未检查','○'],checking:['检查中…',''],connected:['已连接','✓'],login:['需要登录','!'],error:['读取失败','!']};
+const labels={unknown:['尚未检查','○'],checking:['检查中…',''],connected:['已连接','✓'],login:['需要登录','!'],verification:['需验证','!'],error:['读取失败','!']};
 
-export function connectionStatus({loading=false,connected,error}={}){
+export function connectionStatus({loading=false,connected,error,state:verifiedState}={}){
  let state='unknown';
  if(loading)state='checking';
+ else if(verifiedState&&Object.hasOwn(labels,verifiedState))state=verifiedState;
  else if(connected===true)state='connected';
  else if(connected===false){
   // Only explicit login failures count as signed out; network and permission errors do not.

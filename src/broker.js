@@ -1,7 +1,9 @@
 import md5 from 'blueimp-md5';
 import {AutoSlidesIndex} from './watch/autoslides-index.js';
+import {liveCourseCandidates} from './watch/live-links.js';
+import {readImportedCatalog} from './watch/catalog-import.js';
 import {normalizeCourse} from './catalog-core.js';
-const legacyIndex=new AutoSlidesIndex();
+const legacyIndex=new AutoSlidesIndex({local:true});
 import {CourseSources} from './platform-api.js';
 import {LmsClient} from './lms-client.js';
 import {LexueClient} from './lexue-client.js';
@@ -12,20 +14,40 @@ import {LmsWriter} from './lms-writer.js';
 import {attachmentUrl} from './lms-core.js';
 import {AttachmentDownloads} from './downloads.js';
 import {checkForUpdate} from './update-check.js';
+import {PlatformConnections,sessionError} from './platform-connections.js';
 let updateFlight;
 
-const sources=new CourseSources({hash:md5}),lms=new LmsClient(),lexue=new LexueClient();let ready;
+const sources=new CourseSources({hash:md5,index:legacyIndex}),lms=new LmsClient(),lexue=new LexueClient();let ready;
 const writer=new LmsWriter(lms.fallback),downloads=new AttachmentDownloads();
+const connections=new PlatformConnections({probe:async(source,signal)=>{
+ if(source==='modern'||source==='legacy'){await sources[source].authenticate({force:true,signal});return;}
+ await (source==='lexue'?lexue:lms).fallback.read({kind:'connection',signal});
+}});
+async function teachingCourses(client,source,args){
+ try{return await client.courses(...args);}catch(error){if(!sessionError(error))throw error;const checked=await connections.check(source,{force:true,sessionFailure:error});if(!checked.connected)throw error;return client.courses(true);}
+}
 async function catalogReady(){
- if(!ready)ready=(async()=>{let stats=await catalogOperation('init');const info=await fetch(chrome.runtime.getURL('build-info.json')).then(r=>r.json());const saved=await chrome.storage.local.get('desk:seed');
-  if(info.catalog&&(saved['desk:seed']!==info.catalog.sha256||!stats.count)){const response=await fetch(chrome.runtime.getURL('private-catalog.json'));if(response.ok){stats=await catalogOperation('import',{name:'catalog.json',buffer:await response.arrayBuffer()});await chrome.storage.local.set({'desk:seed':info.catalog.sha256});}}
+ if(!ready)ready=(async()=>{let stats=await catalogOperation('init');const info=await fetch(chrome.runtime.getURL('build-info.json')).then(r=>r.json());const saved=await chrome.storage.local.get('desk:seed'),bundled=await fetch(chrome.runtime.getURL('bundled-catalogs.json')).then(r=>r.ok?r.json():{});
+  if(!bundled.catalogs?.modern&&info.catalog&&(saved['desk:seed']!==info.catalog.sha256||!stats.count)){const response=await fetch(chrome.runtime.getURL('private-catalog.json'));if(response.ok){stats=await catalogOperation('import',{name:'catalog.json',buffer:await response.arrayBuffer()});await chrome.storage.local.set({'desk:seed':info.catalog.sha256});}}
   return stats;
  })().catch(e=>{ready=null;throw e;});
  await ready;
 }
 const numeric=value=>{if(!/^\d{1,12}$/.test(String(value)))throw new Error('编号无效');};
 export function trustedReader(sender){return sender.id===chrome.runtime.id&&(sender.url?.startsWith(chrome.runtime.getURL(''))||Boolean(sender.tab&&isPlatformPage(sender.url)));}
-export async function readOperation(operation,args={}){
+export async function readOperation(operation,args={},{signal}={}){
+ signal?.throwIfAborted();
+ if(operation==='publicCatalog'){
+  const {method,values=[]}=args;if(!Array.isArray(values)||values.length>2)throw new Error('目录读取条件无效');
+  if(method==='liveCandidates'){
+   const [course,platform]=values;if(!course||typeof course!=='object'||JSON.stringify(course).length>4096)throw new Error('课程信息无效');
+   return liveCourseCandidates(course,platform,{readCatalog:kind=>readImportedCatalog(kind)});
+  }
+  if(!['terms','search','course','owner','sessions'].includes(method))throw new Error('不支持的目录读取');
+  if(['course','owner','sessions'].includes(method))numeric(values[0]);
+  return legacyIndex[method](...values);
+ }
+ if(operation==='connection')return connections.check(args.source,{force:args.force===true});
  if(operation==='checkUpdate'){if(!updateFlight)updateFlight=checkForUpdate(chrome.runtime.getManifest().version).finally(()=>updateFlight=null);return updateFlight;}
  if(operation==='catalog'){
   const {type}=args;if(!['init','stats','get','search','related','upsert','import'].includes(type))throw new Error('不支持的目录操作');
@@ -43,12 +65,13 @@ export async function readOperation(operation,args={}){
   const methods=['enrolled','search','today','otherTeacherCourses','materials'];if(!methods.includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的课堂读取');
   if(['otherTeacherCourses','materials'].includes(args.method))numeric(args.args[0]);
   if(args.method==='search'&&String(args.args[0]||'').length>512)throw new Error('搜索内容过长');
+  if(args.method==='materials')return sources.modern.materials(args.args[0],{signal});
   return sources.modern[args.method](...args.args);
  }
  if(operation==='detail'){if(!['modern','legacy'].includes(args.args?.[0]))throw new Error('平台无效');numeric(args.args[1]);return sources.detail(...args.args);}
  if(operation==='resolve'){if(String(args.args?.[0]).length>4096)throw new Error('地址过长');return sources.resolve(...args.args);}
- if(operation==='lms'){if(!['courses','homeworks','materials','resources','task'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的新乐学读取');if(args.method!=='courses')numeric(args.args[0]);if(['resources','task'].includes(args.method))numeric(args.args[1]);return lms[args.method](...args.args);}
- if(operation==='lexue'){if(!['courses','homeworks','materials','resources','material','task'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的旧乐学读取');if(args.method!=='courses')numeric(args.args[0]);if(['resources','material','task'].includes(args.method))numeric(args.args[1]);return lexue[args.method](...args.args);}
+ if(operation==='lms'){if(!['courses','homeworks','materials','resources','task'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的新乐学读取');if(args.method!=='courses')numeric(args.args[0]);if(['resources','task'].includes(args.method))numeric(args.args[1]);if(['homeworks','materials'].includes(args.method))return lms[args.method](args.args[0],{signal});return args.method==='courses'?teachingCourses(lms,'lms',args.args):lms[args.method](...args.args);}
+ if(operation==='lexue'){if(!['courses','homeworks','materials','resources','material','task'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的旧乐学读取');if(args.method!=='courses')numeric(args.args[0]);if(['resources','material','task'].includes(args.method))numeric(args.args[1]);if(['homeworks','materials'].includes(args.method))return lexue[args.method](args.args[0],{signal});return args.method==='courses'?teachingCourses(lexue,'lexue',args.args):lexue[args.method](...args.args);}
  if(operation==='lmsWrite'){if(!['upload','submit'].includes(args.method)||!Array.isArray(args.args))throw new Error('不支持的作业操作');numeric(args.args[0]);numeric(args.args[1]);return writer[args.method](...args.args);}
  if(operation==='download'){
   numeric(args.courseId);numeric(args.id);

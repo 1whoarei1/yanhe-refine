@@ -6,7 +6,7 @@ report=[]
 expected=json.loads((root/'src/manifest.json').read_text(encoding='utf8'))
 with_sessions='--with-session-index' in sys.argv
 for personal in ([False,True] if '--personal' in sys.argv else [False]):
- name='yanhe-refine-'+expected['version']+('-personal' if personal else '')+('-session-test' if with_sessions else '')
+ name='yanhe-refine-'+expected['version']+('-dev' if expected.get('version_name')==expected['version']+'-dev' else '')+('-personal' if personal else '')+('-session-test' if with_sessions else '')
  folder=root/'dist'/name
  archive=folder.parent/(name+'.zip')
  with zipfile.ZipFile(archive) as z:
@@ -48,6 +48,12 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    data=json.loads(snapshot);assert data['format']=='yanhekt-session-index/v1' and data['source']['kind']=='self-collected'
    assert len(data['courses'])==data['coverage']['courses']
    assert sum(len(row['sessions']) for row in data['courses'])==data['coverage'].get('exportedSessions',data['coverage']['sessions'])
+  bundled=json.loads(z.read('bundled-catalogs.json'))
+  assert bundled['schema']==1
+  for kind,entry in bundled['catalogs'].items():
+   assert entry['path']=={'modern':'课程目录/课程目录.json','sessions':'课程目录/旧版课次目录.json'}[kind]
+   snapshot=json.loads(z.read(entry['path']))
+   assert entry['date']==(snapshot.get('generatedAt') or snapshot.get('snapshot_date'))
   if personal:
    seed=z.read('private-catalog.json')
    assert hashlib.sha256(seed).hexdigest()==info['catalog']['sha256']
@@ -57,6 +63,10 @@ for personal in ([False,True] if '--personal' in sys.argv else [False]):
    assert z.read(n)==(folder/n).read_bytes(),n
   for n in ['README.md','THIRD_PARTY_NOTICES.md','LICENSE','licenses/fflate.LICENSE','licenses/saxes.LICENSE','licenses/xmlchars.LICENSE','licenses/parse5.LICENSE','licenses/entities.LICENSE','licenses/BIT_yanhe_download.LICENSE','watch/vendor/hls.LICENSE','watch/vendor/md5.LICENSE','watch/vendor/mpegts.LICENSE','watch/vendor/mpegts.NOTICE.txt']:
    assert n in names,n
+  for n in ['watch/catalog-client.js','watch/transcript-list.js','watch/vendor/hls.worker.js']:
+   assert n in names,n
+  for n in ['watch/player.js','watch/companion.js']:
+   assert "workerPath:new URL('vendor/hls.worker.js',import.meta.url).href" in z.read(n).decode('utf8'),n
   assert not any(any(p in n.lower() for p in ['.sqlite','.env','session.json','node_modules/','test-results/','local-data/']) for n in names)
  report.append({'archive':str(archive),'personal':personal,'importableCatalog':has_import_catalog,'files':len(names),'bytes':archive.stat().st_size})
 (root/'test-results'/('session-package-report.json' if with_sessions else 'package-report.json')).write_text(json.dumps({'ok':True,'packages':report},ensure_ascii=False,indent=2),encoding='utf8')

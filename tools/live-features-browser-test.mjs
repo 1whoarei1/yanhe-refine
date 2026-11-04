@@ -68,7 +68,7 @@ try{
  await player.locator('#control-volume').click();await player.waitForFunction(()=>{const v=document.getElementById('video');return !v.muted&&v.volume>0&&!v.paused;});
  assert.equal(await worker.evaluate(async id=>(await chrome.tabs.get(id)).mutedInfo.muted,tabId),false);
  report.checks.push('enable-sound gesture clears selected mute, zero volume and the extension tab mute');
- await openSettings();await player.locator('#screen').click();await player.waitForFunction(()=>{const a=document.getElementById('video'),b=document.getElementById('audio-video');return a.muted&&!b.muted&&b.webkitAudioDecodedByteCount>0&&!b.paused;});
+ await openSettings();await player.locator('#primary-view').selectOption('screen');await player.waitForFunction(()=>{const a=document.getElementById('video'),b=document.getElementById('audio-video');return a.muted&&!b.muted&&b.webkitAudioDecodedByteCount>0&&!b.paused;});
  assert.equal(await player.locator('#secondary-stage').isVisible(),false);
  report.checks.push('silent screen-only view gets classroom audio through a hidden companion decoder');
  await player.locator('#dual').click();await player.waitForFunction(()=>document.getElementById('secondary-video').videoWidth>0&&!document.getElementById('secondary-video').muted);assert.equal(await player.locator('#secondary-stage').isVisible(),true);

@@ -63,3 +63,7 @@ test('reference-only course metadata resolves through semester and academic-year
  assert.equal(lmsCourses({courses:[{id:705,academic_year:{name:'2026-2027'},semester:1}]},{semesters:[{id:1,real_name:'第二学期'}]})[0].term,'2026-2027-2');
  assert.equal(lmsCourses({courses:[{id:704,name:'父学年',semester_id:902}]},{academicYears:[{id:81,name:'2026'}],semesters:[{id:902,real_name:'秋季学期',academic_year_id:81}]} )[0].term,'2026-2027-1');
 });
+test('the real current LMS semester with null names resolves through its dictionary instead of its database ID',()=>{
+ const rows=lmsCourses({courses:[{id:20290,name:'计算机视觉',academic_year:{id:4,code:'2026',name:'2026-2027',sort:3},semester:{id:10,code:'2026-1',name:null,real_name:null,sort:6}}]},{semesters:[{id:10,academic_year_id:4,is_active:true,name:'2026-20271季学期',real_name:'1季学期',sort:6}]});
+ assert.equal(rows[0].term,'2026-2027-1');
+});

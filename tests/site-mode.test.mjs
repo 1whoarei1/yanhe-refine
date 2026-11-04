@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {SITE_MODE_KEY,modeIntent,siteMode,readSiteMode} from '../src/site-mode.js';
 import {nativeHref,refineEntryHref,siteRoute,isPlatformPage} from '../src/site-routes.js';
+import {ReadRequests,cancellableRead} from '../src/read-requests.js';
 
 function preference(){const data={},writes=[];return {data,writes,storage:{get:async key=>({[key]:data[key]}),set:async values=>{Object.assign(data,values);writes.push(values);}}};}
 test('choosing native persists through unrelated entry links on both classroom sites until choosing refine',async()=>{
@@ -31,9 +32,9 @@ test('explicit return links keep course/session context and unsupported old page
 });
 test('toolbar checks the actual rendered view when a native entry URL has no one-page opt-out marker',async()=>{
  let action,view='native';const updates=[],choices=[];
- const chrome={runtime:{id:'fixture',onInstalled:{addListener(){}},onStartup:{addListener(){}},onMessage:{addListener(){}}},action:{onClicked:{addListener:fn=>action=fn}},tabs:{sendMessage:async()=>({mode:view}),update:async(id,args)=>updates.push({id,...args}),create:async args=>updates.push(args)}};
+ const chrome={runtime:{id:'fixture',onInstalled:{addListener(){}},onStartup:{addListener(){}},onMessage:{addListener(){}}},action:{onClicked:{addListener:fn=>action=fn}},tabs:{onRemoved:{addListener(){}},sendMessage:async()=>({mode:view}),update:async(id,args)=>updates.push({id,...args}),create:async args=>updates.push(args)}};
  const source=readFileSync(new URL('../src/background.js',import.meta.url),'utf8').replace(/^import .*\r?\n/gm,'');
- runInNewContext(source,{chrome,URL,nativeHref,refineEntryHref,isPlatformPage,readSiteMode:async raw=>{choices.push(modeIntent(raw));return 'native';}});
+ runInNewContext(source,{chrome,URL,nativeHref,refineEntryHref,isPlatformPage,ReadRequests,cancellableRead,readSiteMode:async raw=>{choices.push(modeIntent(raw));return 'native';}});
  await action({id:5,url:'https://aita.yanhekt.cn/coursedetail?course_id=102178'});
  assert.equal(modeIntent(updates[0].url),'refine');
  view='refine';await action({id:5,url:'https://www.yanhekt.cn/session/71990'});

@@ -47,14 +47,14 @@ export class LmsWriter{
   if(!/^[a-zA-Z0-9-]{16,80}$/.test(requestId||''))throw new Error('提交标识无效');
   if(typeof comment!=='string'||comment.length>100000||!Array.isArray(uploads)||uploads.length>30||new Set(uploads).size!==uploads.length)throw new Error('提交内容无效');
   if(!comment.trim()&&!uploads.length)throw new Error('请填写内容或选择附件');
-  const key=`desk:submission:${courseId}:${id}:${requestId}`;
+  const userId=await this.reader.userId(courseId),key=`desk:submission:${userId}:${courseId}:${id}:${requestId}`;
   if(this.flights.has(key))return this.flights.get(key);
-  const flight=this.submitOnce(courseId,id,{comment,uploads},key);this.flights.set(key,flight);
+  const flight=this.submitOnce(courseId,id,{comment,uploads,userId},key);this.flights.set(key,flight);
   try{return await flight;}finally{this.flights.delete(key);}
  }
- async submitOnce(courseId,id,{comment,uploads},key){
+ async submitOnce(courseId,id,{comment,uploads,userId},key){
   const saved=(await this.session?.get(key))?.[key];if(saved)return saved;
-  const before=await this.preflight(courseId,id),userId=await this.reader.userId(courseId);
+  const before=await this.preflight(courseId,id);if(await this.reader.userId(courseId)!==userId)throw new Error('新乐学账号已切换，请刷新后重试');
   for(const value of uploads){const uploadId=numeric(value),owned=this.uploads.get(uploadId)||(await this.session?.get('desk:upload:'+uploadId))?.['desk:upload:'+uploadId];if(!owned||owned.courseId!==String(courseId)||owned.activityId!==String(id)||owned.userId!==userId)throw new Error('附件状态已失效，请重新选择文件');}
   const uncertain={status:'uncertain',message:'提交结果待核对，请刷新提交记录，勿重复提交'};
   // Persist before the write so a worker restart cannot silently replay a POST.

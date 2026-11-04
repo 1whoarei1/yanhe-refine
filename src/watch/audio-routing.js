@@ -4,6 +4,11 @@ export function viewPlan(streams,current,count=1,second){
  const alternate=available.includes(second)&&second!==main?second:available.find(view=>view!==main);
  return [main,alternate,...available.filter(view=>view!==main&&view!==alternate)].filter(Boolean).slice(0,Math.min(Math.max(1,count),available.length));
 }
+export function assignView(plan,index,view){
+ const next=[...plan],previous=next.indexOf(view);
+ if(!Number.isInteger(index)||index<0||index>=next.length||previous<0)return next;
+ [next[index],next[previous]]=[next[previous],next[index]];return next;
+}
 export function chooseAudio(streams={},current,preference='auto',tracks={}){
  if(preference==='muted')return null;if(preference==='current'&&streams[current])return current;if(streamViews.includes(preference)&&streams[preference])return preference;
  const available=['classroom','student','screen'].filter(view=>streams[view]);return available.find(view=>tracks[view]===true)||available.find(view=>tracks[view]!==false)||null;

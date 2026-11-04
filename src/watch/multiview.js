@@ -1,12 +1,12 @@
 import {Companion} from './companion.js';
-import {AudioRouter,chooseAudio,viewPlan,observeAudio} from './audio-routing.js';
+import {AudioRouter,chooseAudio,viewPlan,assignView,observeAudio} from './audio-routing.js';
 
-export function mountMultiview({video,getApi,getInfo,getView,getHls,isLive,isAttached,isConnecting,getTimely,blockedViews,onStatus,onBlocked}){
+export function mountMultiview({video,getApi,getInfo,getView,onViewChange,getHls,isLive,isAttached,isConnecting,getTimely,blockedViews,onStatus,onBlocked}){
  const $=id=>document.getElementById(id),secondary=$('secondary-video'),tertiary=$('tertiary-video'),audio=$('audio-video');
- const router=new AudioRouter([video,secondary,tertiary,audio]),tracks={},failures=new Set();let count=1,unobserve=null,generation=0;
+ const router=new AudioRouter([video,secondary,tertiary,audio]),tracks={},failures=new Set();let count=1,unobserve=null,generation=0,secondaryView='';
  const save=values=>void chrome.storage.local.set(values).catch(()=>{});
  const streams=()=>Object.fromEntries(Object.entries(getInfo()?.streams||{}).filter(([view])=>!blockedViews.has(view)));
- const name=view=>({screen:'屏幕',classroom:'教室/主画面',student:'学生'}[view]||'当前画面');
+ const name=view=>({screen:'屏幕',classroom:'教室',student:'学生'}[view]||'当前画面');
  const desired=()=>chooseAudio($('audio-source').value==='auto'?Object.fromEntries(Object.entries(streams()).filter(([view])=>!failures.has(view))):streams(),getView(),$('audio-source').value,tracks);
  function found(view,present){if(tracks[view]===present)return;tracks[view]=present;refresh();}
  function follower(media,independent=false){return new Companion(video,media,{getApi,getInfo,getView,getHls,independent:()=>independent&&isLive()&&getTimely(),onAudio:found,onReady:()=>route(),onAudioBlocked:element=>{router.block(element);onBlocked('浏览器拦截所选来源的声音，请点击音量图标恢复声音。');status();},onError:(text,view)=>{failures.add(view);if(!independent)blockedViews.add(view);refresh();onStatus(name(view)+'：'+text,true);}});}
@@ -21,23 +21,33 @@ export function mountMultiview({video,getApi,getInfo,getView,getHls,isLive,isAtt
   const view=desired(),media=carrier(view);let text;
   if($('audio-source').value==='muted')text='已静音';
   else if(router.volume===0)text='音量为 0';
-  else if(!view)text=Object.keys(streams()).length?(failures.size?'声音来源连接失败，可重新连接或手动选择':'可用来源均未检测到音轨'):'等待直播来源';
+  else if(!view)text=Object.keys(streams()).length?(failures.size?'声音来源连接失败，可刷新页面或手动选择':'可用来源均未检测到音轨'):'等待直播来源';
   else if(media&&router.blocked.has(media))text=name(view)+'声音被浏览器拦截，点击音量图标恢复声音';
   else if(failures.has(view))text=name(view)+'声音连接失败，可重新选择来源';
   else if(tracks[view]===false)text=name(view)+'没有音轨，请切换声音来源';
   else text='声音：'+name(view)+(tracks[view]===true?' · 已检测到音轨':' · 正在检测音轨');
   if($('audio-status').textContent!==text)$('audio-status').textContent=text;
+  const auto=$('audio-source').querySelector('option[value=auto]'),label=view?'自动 · '+({screen:'屏幕',classroom:'教室',student:'学生'}[view]):'自动检测音轨';
+  if(auto.textContent!==label)auto.textContent=label;
+  $('audio-source').title=text;
+  const warning=$('audio-source').value!=='muted'&&router.volume>0&&((!view&&Object.keys(streams()).length>0)||Boolean(media&&router.blocked.has(media))||failures.has(view)||tracks[view]===false);
+  $('audio-warning').hidden=!warning;if($('audio-warning').textContent!==(warning?text:''))$('audio-warning').textContent=warning?text:'';
  }
  function ensure(controller,view){if(!view){if(controller.active||controller.loading)controller.stop();return;}if((controller.active||controller.loading)&&controller.view===view)return;void controller.start(view);}
  function refresh(){
   const available=streams(),length=Object.keys(available).length;count=Math.min(count,Math.max(1,length),isLive()?3:2);
-  const plan=viewPlan(available,getView(),count,$('secondary-view').value);
+  const plan=viewPlan(available,getView(),count,secondaryView);if(plan[1])secondaryView=plan[1];
   $('dual').disabled=length<2;$('triple').disabled=!isLive()||length<3;$('triple').hidden=!isLive()||length<3;
   $('dual').setAttribute('aria-pressed',String(count===2));$('triple').setAttribute('aria-pressed',String(count===3));
   $('media-grid').classList.toggle('dual',count===2);$('media-grid').classList.toggle('triple',count===3);
-  $('secondary-stage').hidden=plan.length<2;$('tertiary-stage').hidden=plan.length<3;$('secondary-view-label').hidden=count<2;$('secondary-view-label').firstChild.textContent=count===3?'右上画面 ':'副画面 ';
-  for(const option of $('secondary-view').options)option.disabled=!available[option.value]||option.value===getView();
-  if(plan[1])$('secondary-view').value=plan[1];$('secondary-label').textContent=name(plan[1]);$('tertiary-label').textContent=name(plan[2]);
+  $('secondary-stage').hidden=plan.length<2;$('tertiary-stage').hidden=plan.length<3;$('secondary-view-label').hidden=count<2;$('tertiary-view-label').hidden=count<3;
+  $('view-assignment').dataset.layout=count===3?'triple':count===2?'dual':'single';
+  $('layout-primary-label').textContent=count>1?'左侧':'画面';$('layout-primary-view').setAttribute('aria-label',count>1?'左侧画面来源':'主视角位置来源');$('secondary-view-text').textContent=count===3?'右上':'右侧';$('secondary-view').setAttribute('aria-label',count===3?'右上画面来源':'右侧画面来源');
+  for(const [id,index]of [['primary-view',0],['layout-primary-view',0],['secondary-view',1],['tertiary-view',2]]){
+   const select=$(id);select.disabled=!plan[index];for(const option of select.options){option.disabled=!available[option.value];option.hidden=!getInfo()?.streams?.[option.value];}
+   select.value=plan[index]||'';
+  }
+  $('secondary-label').textContent=name(plan[1]);$('tertiary-label').textContent=name(plan[2]);
   $('audio-label').hidden=!length;$('volume-label').hidden=!length;
   for(const option of $('audio-source').options)if(['screen','classroom','student'].includes(option.value))option.disabled=!available[option.value];
   if(!isAttached()||isConnecting()){for(const controller of followers)if(controller.active||controller.loading)controller.stop();router.apply(null);status();return;}
@@ -46,7 +56,10 @@ export function mountMultiview({video,getApi,getInfo,getView,getHls,isLive,isAtt
  }
  function volume(value){router.setVolume(value);$('audio-volume').value=String(Math.round(router.volume*100));$('volume-value').textContent=Math.round(router.volume*100)+'%';status();}
  for(const [id,value]of [['dual',2],['triple',3]])$(id).addEventListener('click',()=>{count=count===value?1:value;refresh();});
- $('secondary-view').addEventListener('change',refresh);
+ for(const [id,index]of [['primary-view',0],['layout-primary-view',0],['secondary-view',1],['tertiary-view',2]])$(id).addEventListener('change',()=>{
+  const available=streams(),plan=viewPlan(available,getView(),Object.keys(available).length,secondaryView),next=assignView(plan,index,$(id).value);
+  secondaryView=next[1]||'';if(next[0]&&next[0]!==getView())onViewChange(next[0]);else refresh();
+ });
  $('audio-source').addEventListener('change',()=>{failures.clear();router.unlock();refresh();for(const controller of followers)controller.sync();save({'player:audioSource':$('audio-source').value});});
  $('audio-volume').addEventListener('input',()=>{volume(Number($('audio-volume').value)/100);save({'player:volume':router.volume});});
  video.addEventListener('volumechange',()=>{if(video.volume!==router.volume)volume(video.volume);router.apply();});
@@ -57,5 +70,5 @@ export function mountMultiview({video,getApi,getInfo,getView,getHls,isLive,isAtt
   save({'player:audioSource':$('audio-source').value});void chrome.tabs.getCurrent().then(tab=>tab?.id!=null?chrome.tabs.update(tab.id,{muted:false}):null).catch(()=>{});
  }
  function stop(){generation++;unobserve?.();unobserve=null;for(const controller of followers)controller.stop();router.reset();}
- return {refresh,stop,enableSound,diagnostics(){return {layout:count,preference:$('audio-source').value,resolvedSource:desired(),volume:router.volume,tracks:{...tracks},failures:[...failures],carrier:router.carrier?.id||null,media:[video,secondary,tertiary,audio].map(media=>({id:media.id,view:media===video?getView():followers.find(c=>c.secondary===media)?.view||null,muted:media.muted,paused:media.paused,readyState:media.readyState,decodedAudio:media.webkitAudioDecodedByteCount>0,blocked:router.blocked.has(media),error:media.error?.code||null}))};},clearAudio(){stop();for(const key of Object.keys(tracks))delete tracks[key];failures.clear();},get count(){return count;},reset(){stop();count=1;for(const key of Object.keys(tracks))delete tracks[key];failures.clear();},observePrimary(options={}){unobserve?.();const epoch=generation,view=getView();unobserve=observeAudio(video,{...options,onAudio:present=>{if(epoch===generation)found(view,present);}});},restore(saved){if(['auto','current','classroom','screen','student','muted'].includes(saved['player:audioSource']))$('audio-source').value=saved['player:audioSource'];if(Number.isFinite(saved['player:volume']))volume(saved['player:volume']);}};
+ return {refresh,stop,enableSound,diagnostics(){return {layout:count,preference:$('audio-source').value,resolvedSource:desired(),volume:router.volume,tracks:{...tracks},failures:[...failures],carrier:router.carrier?.id||null,media:[video,secondary,tertiary,audio].map(media=>({id:media.id,view:media===video?getView():followers.find(c=>c.secondary===media)?.view||null,muted:media.muted,paused:media.paused,readyState:media.readyState,decodedAudio:media.webkitAudioDecodedByteCount>0,blocked:router.blocked.has(media),error:media.error?.code||null}))};},clearAudio(){stop();for(const key of Object.keys(tracks))delete tracks[key];failures.clear();},get count(){return count;},reset(){stop();count=1;secondaryView='';for(const key of Object.keys(tracks))delete tracks[key];failures.clear();},observePrimary(options={}){unobserve?.();const epoch=generation,view=getView();unobserve=observeAudio(video,{...options,onAudio:present=>{if(epoch===generation)found(view,present);}});},restore(saved){if(['auto','current','classroom','screen','student','muted'].includes(saved['player:audioSource']))$('audio-source').value=saved['player:audioSource'];if(Number.isFinite(saved['player:volume']))volume(saved['player:volume']);}};
 }

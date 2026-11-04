@@ -32,7 +32,7 @@ export class Companion{
     this.flv=mpegts.createPlayer({type:'flv',isLive:live,url,cors:true,withCredentials:true},{enableWorker:false,enableStashBuffer:false,lazyLoad:false,autoCleanupSourceBuffer:true});
     this.unobserve=observeAudio(video,{flv:this.flv,onAudio});this.flv.on(mpegts.Events.ERROR,()=>{if(epoch===this.epoch)this.fail('直播来源连接失败');});this.flv.attachMediaElement(video);this.flv.load();
    }else if(globalThis.Hls?.isSupported()){
-    this.hls=new Hls({enableWorker:false,lowLatencyMode:live,maxBufferLength:12,maxMaxBufferLength:20,backBufferLength:8,maxBufferSize:20*1024*1024,
+    this.hls=new Hls({enableWorker:true,workerPath:new URL('vendor/hls.worker.js',import.meta.url).href,lowLatencyMode:live,maxBufferLength:12,maxMaxBufferLength:20,backBufferLength:8,maxBufferSize:20*1024*1024,
      async xhrSetup(xhr,raw){await api.prepareMedia?.(signal,raw);signal.throwIfAborted();xhr.open('GET',api.sign(raw),true);xhr.withCredentials=true;}});
     this.unobserve=observeAudio(video,{hls:this.hls,onAudio});this.hls.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal&&epoch===this.epoch)this.fail('直播来源连接失败');});this.hls.loadSource(url);this.hls.attachMedia(video);
    }else throw new Error('浏览器不支持此直播来源');

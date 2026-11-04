@@ -4,6 +4,7 @@ import {parseCourse,replayRows} from './watch/core.js';
 import {liveRows} from './watch/live-core.js';
 import {normalizeCourse,text,termLabel} from './catalog-core.js';
 import {schoolEpoch} from './lms-core.js';
+import {withReadSignal} from './shared-reads.js';
 
 export class PlatformApi extends YanheApi {
  async authenticate(options={}){if(this.loginFlight)return this.loginFlight;this.loginFlight=super.authenticate(options);try{return await this.loginFlight;}finally{this.loginFlight=null;}}
@@ -46,10 +47,11 @@ export class PlatformApi extends YanheApi {
   await this.authenticate();const {data}=await this.json('/courseapi/v3/multi-search/get-course-teacher-others',{course_id:id,per_page:20});
   return (Array.isArray(data)?data:[]).map(r=>normalizeCourse(r,'modern')).filter(c=>c&&!c.testCourse);
  }
- async materials(id){
-  await this.authenticate();const rows=[];
+ async materials(id,{signal}={}){
+  signal?.throwIfAborted();await withReadSignal(this.authenticate(),signal);const rows=[];
   for(let page=1;page<=100;page++){
-   const body=await this.json('/courseapi/v3/course-share-resource/get-course-resource',{course_id:id,page,per_page:100});
+   signal?.throwIfAborted();const body=await this.json('/courseapi/v3/course-share-resource/get-course-resource',{course_id:id,page,per_page:100},{signal});
+   signal?.throwIfAborted();
    if(!Array.isArray(body.data))throw new Error('资料格式已变化');
    for(const r of body.data){const resourceId=text(r.resource_id&&String(r.resource_id)!=='0'?r.resource_id:r.old_resource_id),title=text(r.resource_name||r.name||r.title)||'课程资料',suffix=text(r.resource_suffix);
     rows.push({id:text(r.id),resourceId,title,type:'material',source:'modern',courseId:String(id),

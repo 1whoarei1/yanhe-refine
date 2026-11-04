@@ -23,10 +23,23 @@ export function academicTerm(year,semester){
  if(!part&&!candidates.length){const suffix=termLabel(yearName).match(/^\d{4}-\d{4}-([123])$/);if(suffix)part=suffix[1];}
  return part?`${years[1]}-${years[2]}-${part}`:'';
 }
-export function schoolEpoch(value) {
+export function schoolEpoch(value,term='') {
  if(typeof value==='number'||/^\d{10,13}$/.test(text(value))){const n=Number(value);return Number.isFinite(n)?(n<1e12?n*1000:n):null;}
- const raw=text(value);if(!raw)return null;
- const zoned=/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/.test(raw)?raw.replace(' ','T')+'+08:00':raw;
+ let raw=text(value).normalize('NFKC');if(!raw)return null;
+ const partial=raw.match(/^(\d{1,2})[月/-](\d{1,2})日?(?:[ T]+(\d{1,2})[:：](\d{2})(?::(\d{2}))?)?$/);
+ if(partial){
+  const years=String(term).match(/^(20\d{2})-(20\d{2})-([123]|暑期|小学期)$/);if(!years||Number(years[2])!==Number(years[1])+1)return null;
+  const month=Number(partial[1]),year=month>=8&&years[3]==='1'?years[1]:years[2];
+  raw=`${year}-${partial[1].padStart(2,'0')}-${partial[2].padStart(2,'0')}T${(partial[3]||'00').padStart(2,'0')}:${partial[4]||'00'}:${partial[5]||'00'}+08:00`;
+ }
+ // Date.parse assigns its own year to strings such as "01-03 23:59".
+ // Only an explicit year or a known academic term may supply the year.
+ if(!/^\d{4}[-/年]/.test(raw))return null;
+ raw=raw.replace(/^(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})日?/,(_,y,m,d)=>`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+ const calendar=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);if(!calendar)return null;
+ const [year,month,day]=calendar.slice(1).map(Number),check=new Date(Date.UTC(year,month-1,day));
+ if(check.getUTCFullYear()!==year||check.getUTCMonth()!==month-1||check.getUTCDate()!==day)return null;
+ const zoned=/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/.test(raw)?raw.replace(' ','T')+'+08:00':/^\d{4}-\d\d-\d\d$/.test(raw)?raw+'T00:00:00+08:00':raw;
  const n=Date.parse(zoned);return Number.isFinite(n)?n:null;
 }
 export function published(row) {
@@ -46,7 +59,7 @@ export function lmsCourses(body,catalog={}) {
  });
 }
 export function activityUrl(courseId,id) {return `https://zy-eclass.bit.edu.cn/course/${courseId}/learning-activity/full-screen#/${id}`;}
-export function homeworkRows(body,statusBody={},courseId) {
+export function homeworkRows(body,statusBody={},courseId,term='') {
  if((body.homework_activities||[]).some(r=>r.course_id!=null&&String(r.course_id)!==String(courseId)))throw new Error('作业列表与当前课程不一致');
  const status=new Map((statusBody.homework_activities||[]).map(r=>[text(r.id),r]));
  return (body.homework_activities||[]).filter(published).map(r=>{
@@ -55,7 +68,7 @@ export function homeworkRows(body,statusBody={},courseId) {
   if(isTrue(r.submitted)||['submitted','late_submitted','graded','completed'].includes(raw))state='submitted';
   else if([false,0,'0'].includes(r.submitted)||['absent','unsubmitted','not_submitted'].includes(raw))state='pending';
   return {id,courseId:text(courseId),title:text(r.title||r.name||r.data?.title||r.data?.name)||'作业',state,
-   deadline:schoolEpoch(r.deadline||r.end_time||r.data?.deadline),start:schoolEpoch(r.start_time),closed:isTrue(r.is_closed),group:isTrue(r.submit_by_group),
+   deadline:schoolEpoch(Object.hasOwn(r,'end_time')?r.end_time:r.deadline??r.data?.deadline,term),start:schoolEpoch(r.start_time,term),closed:isTrue(r.is_closed),group:isTrue(r.submit_by_group),
    makeUp:isTrue(r.can_make_up_homework),url:activityUrl(courseId,id)};
  }).filter(r=>/^\d{1,12}$/.test(r.id));
 }
@@ -68,8 +81,8 @@ export function materialRows(body,courseId) {
 export function resourceRows(body) {
  return (body.uploads||[]).filter(r=>!isTrue(r.deleted)).map(r=>({id:text(r.id),referenceId:text(r.reference_id),name:text(r.name),size:Number(r.size)||0,type:text(r.type),download:isTrue(r.allow_download)}));
 }
-export function homeworkDetail(row,courseId) {
- const data=row.data||{},base=homeworkRows({homework_activities:[row]}, {},courseId)[0];
+export function homeworkDetail(row,courseId,term='') {
+ const data=row.data||{},base=homeworkRows({homework_activities:[row]}, {},courseId,term)[0];
  if(!base||String(row.course_id)!==String(courseId)||row.type!=='homework')throw new Error('作业不属于当前课程或尚未发布');
  const unlimited=isTrue(row.non_submit_times??data.non_submit_times),limit=Number(row.submit_times??data.submit_times),used=Number(row.user_submit_count)||0;
  const supported=data.homework_type==='file_upload'&&(!data.mode||data.mode==='normal');

@@ -1,4 +1,4 @@
-export function safeFilename(name){let v=String(name||'附件').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').slice(0,150);if(!v||/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(v))v='_'+v;return v;}
+export function safeFilename(name){let v=String(name||'附件').replace(/[<>:"/\\|?*\x00-\x1f\x7f-\x9f]/g,'_').replace(/[. ]+$/g,'').slice(0,150);if(!v||/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(v))v='_'+v;return v;}
 export function safeDownloadUrl(value){
  const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||!(u.hostname.endsWith('.yanhekt.cn')||u.hostname==='yanhekt.cn'||u.hostname.endsWith('.bit.edu.cn')))throw new Error('附件下载地址不受支持');return u.href;
 }

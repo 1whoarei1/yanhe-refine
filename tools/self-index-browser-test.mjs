@@ -11,6 +11,7 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),pkg=JSON.parse(
 const scratch=await mkdtemp(join(tmpdir(),'yanhe-self-index-')),ext=join(scratch,'extension'),out=join(root,'test-results');await mkdir(out,{recursive:true});await cp(resolve(process.env.EXTENSION_PATH||join(root,'extension')),ext,{recursive:true});
 const raw=await readFile(join(ext,'legacy-session-index.json')),catalog=JSON.parse(raw),courses=new Map(catalog.courses.map(c=>[String(c.id),c]));
 if(refine)await writeFile(join(ext,'build-info.json'),JSON.stringify({version:pkg.version,catalog:null}));
+await writeFile(join(ext,'bundled-catalogs.json'),JSON.stringify({schema:1,catalogs:{}}));
 const report={version:pkg.version,mode:'real self-collected snapshot and live anonymous public metadata; fixture login/profile and host shell; no media playback',snapshot:{sha256:createHash('sha256').update(raw).digest('hex'),generatedAt:catalog.generatedAt,courses:courses.size,sessions:catalog.coverage.sessions,partial:catalog.partial},checks:[],liveReads:[]};
 let context,page;
 try{

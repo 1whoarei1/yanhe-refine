@@ -2,6 +2,7 @@ import { YanheApi } from './api.js';
 import { mediaUrl } from './core.js';
 import {AutoSlidesIndex,indexedSession} from './autoslides-index.js';
 import { LEGACY_API,LEGACY_ORIGIN,legacyHeaders,legacyToken,legacyReplays,legacyStreams,legacyLive,legacyLiveSignedUrl,parseLegacyCaptions } from './legacy-core.js';
+import {readAuthTabs} from './tab-auth.js';
 
 const validId=value=>/^[1-9]\d{0,11}$/.test(String(value??''));
 const publicReplays=rows=>rows.map(({video,...row})=>row);
@@ -14,24 +15,29 @@ export class LegacyYanheApi extends YanheApi {
     for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
     const response=await this.fetcher(url.href,{credentials:'include',redirect:'error',cache:'no-store',headers:legacyHeaders(this.token,this.hash),
       signal:signal?AbortSignal.any([signal,AbortSignal.timeout(18000)]):AbortSignal.timeout(18000)});
-    if(!response.ok)throw new Error(`旧版课堂返回 HTTP ${response.status}。`);
+    if(!response.ok){const error=new Error(`旧版课堂返回 HTTP ${response.status}。`);if(response.status===401)error.code='AUTH_REQUIRED';throw error;}
     const body=await response.json();
     if(![0,'0'].includes(body.code)){const error=new Error(Number(body.code)===12121028?'旧版课程已过期，当前接口未提供此资源。':`旧版课堂请求失败（${Number(body.code)||'未知状态'}）。`);error.code=Number(body.code);throw error;}
     return body;
   }
-  async authenticate({signal,force=false}={}) {
+  async authenticate(options={}){
+    if(this.authFlight)return this.authFlight;
+    this.authFlight=this.authenticateOnce(options).finally(()=>this.authFlight=null);return this.authFlight;
+  }
+  async authenticateOnce({signal,force=false}={}) {
     if(!force&&this.profile&&Date.now()-this.authAt<240000){return;}
     this.reset();
-    const pages=await this.tabs?.query({url:[LEGACY_ORIGIN+'/*']}) || [];
-    const results=await Promise.allSettled(pages.slice(0,8).map(page=>this.tabs.sendMessage(page.id,{type:'READ_LEGACY_AUTH'},{frameId:0})));
-    const candidates=[...new Set(results.flatMap(result=>result.status==='fulfilled'?[legacyToken(result.value?.token)]:[]).filter(Boolean))];
-    if(!candidates.length)throw new Error('请在同一浏览器登录旧版延河课堂，刷新旧站网页后重试。');
+    const results=await readAuthTabs(this.tabs,LEGACY_ORIGIN,{type:'READ_LEGACY_AUTH'},{signal});
+    const candidates=[...new Set(results.map(result=>legacyToken(result?.token)).filter(Boolean))];
+    if(!candidates.length){const error=new Error('暂未获取旧延河登录状态，请打开原站验证。');error.code='SESSION_UNAVAILABLE';throw error;}
+    let lastError;
     for(const token of candidates){
       signal?.throwIfAborted();this.token=token;
-      const body=await this.json('/v1/user',{}, {signal});
-      if(body.data?.id!=null){this.profile={id:body.data.id,badge:body.data.badge};this.authAt=Date.now();return;}
+      try{const body=await this.json('/v1/user',{}, {signal});
+        if(body.data?.id!=null){this.profile={id:body.data.id,badge:body.data.badge};this.authAt=Date.now();return;}
+      }catch(error){signal?.throwIfAborted();lastError=error;}
     }
-    this.reset();throw new Error('旧站登录已失效，请重新登录旧站。');
+    this.reset();throw lastError||new Error('旧站登录已失效，请重新登录旧站。');
   }
   async prepareMedia(signal,source) {
     if(source&&!['cvideo.yanhekt.cn','coss.yanhekt.cn'].includes(new URL(source).hostname))return;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sameCourse,matchingLive,liveTimestamp,cleanLinks} from '../src/watch/live-links.js';
+import {sameCourse,matchingLive,liveTimestamp,cleanLinks,liveCourseCandidates} from '../src/watch/live-links.js';
 import {LegacyYanheApi} from '../src/watch/legacy-api.js';
 import {legacyLive} from '../src/watch/legacy-core.js';
 test('course correspondence uses title, teacher and term, never equal numeric IDs',()=>{
@@ -9,6 +9,20 @@ test('course correspondence uses title, teacher and term, never equal numeric ID
  assert.equal(sameCourse(modern,{id:'102154',name:'另一门课',teachers:['黄河燕'],term:modern.term}),false);
  assert.equal(sameCourse(modern,{name:modern.title,teacher:'另一位教师',term:modern.term}),false);
  assert.equal(sameCourse(modern,{name:modern.title,teacher:modern.teacher,term:'2025-2026-1'}),false);
+});
+
+test('live candidates use shared modern/session catalogs in both directions and preserve ambiguous matches',async()=>{
+ const course={id:'100',title:'示例课程',teacher:'教师甲',term:'2026-2027-1'},kinds=[];
+ const readCatalog=async kind=>{kinds.push(kind);return {courses:[{id:'200',name:'示例课程',teachers:['教师甲'],term:course.term},{id:'201',title:'示例课程',teacher:'教师甲',term:course.term},{id:'100',title:'不相关课程'},{id:'202',title:course.title,teacher:'教师乙',term:course.term}]};};
+ const old=await liveCourseCandidates(course,'legacy',{readCatalog}),modern=await liveCourseCandidates(course,'modern',{readCatalog});
+ assert.deepEqual(kinds,['sessions','modern']);assert.deepEqual(old.map(r=>r.id),['200','201']);assert.ok(old.every(r=>r.legacy));assert.ok(modern.every(r=>!r.legacy));
+});
+
+test('a cancelled catalog lookup cannot supply a candidate for the next lecture',async()=>{
+ const controller=new AbortController();let finish;
+ const read=liveCourseCandidates({title:'课程'},'legacy',{signal:controller.signal,readCatalog:()=>new Promise(resolve=>finish=resolve)});
+ controller.abort();finish({courses:[{id:'200',name:'课程'}]});await assert.rejects(read,{name:'AbortError'});
+ assert.deepEqual(await liveCourseCandidates({title:'课程'},'modern',{readCatalog:async()=>null}),[]);
 });
 test('an explicitly live class is not ended by its timetable while ended status remains authoritative',()=>{
  const row={status:1,schedule_started_at:'2026-10-28 13:20:00',schedule_ended_at:'2026-10-28 14:55:00',target:'https://clive14.yanhekt.cn/live/test.m3u8'},now=Date.parse('2026-10-28T07:30:00Z');

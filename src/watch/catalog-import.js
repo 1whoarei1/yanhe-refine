@@ -1,5 +1,29 @@
 // Import public metadata only. Bulk data lives in IndexedDB, outside storage.local's quota.
 const DB='yanhe-imported-catalogs',STORE='datasets',cache=new Map();
+const bundledPaths={modern:'课程目录/课程目录.json',sessions:'课程目录/旧版课次目录.json'};
+let manifestFlight;
+const snapshotDate=data=>Date.parse(data?.generatedAt||data?.snapshot_date)||0;
+async function bundledManifest(){
+ if(!globalThis.chrome?.runtime?.getURL)return {};
+ if(!manifestFlight)manifestFlight=(async()=>{
+  const response=await fetch(chrome.runtime.getURL('bundled-catalogs.json'));
+  if(response.status===404)return {};
+  if(!response.ok)throw new Error('内置目录暂时无法读取，请刷新重试。');
+  const data=await response.json();if(data.schema!==1)throw new Error('内置目录信息无效。');return data.catalogs||{};
+ })().catch(error=>{manifestFlight=null;throw error;});
+ return manifestFlight;
+}
+async function withBundledCatalog(kind,saved){
+ const entry=(await bundledManifest())[kind];if(!entry)return saved;
+ if(entry.path!==bundledPaths[kind]||!snapshotDate({snapshot_date:entry.date}))throw new Error('内置目录信息无效。');
+ // An undated personal import cannot safely be compared with the bundled snapshot.
+ if(saved&&(!snapshotDate(saved)||snapshotDate(saved)>=Date.parse(entry.date)))return saved;
+ const response=await fetch(chrome.runtime.getURL(entry.path));
+ if(!response.ok)throw new Error('内置课程目录读取失败，请刷新重试。');
+ const checked=validateCatalogImport(await response.json());
+ if(checked.kind!==kind||snapshotDate(checked.data)!==Date.parse(entry.date))throw new Error('内置目录与版本信息不一致。');
+ return checked.data;
+}
 const id=value=>/^[1-9]\d{0,11}$/.test(String(value??''));
 const label=(value,max=512)=>typeof value==='string'&&value.length<=max?value.trim():null;
 const invalid=()=>new Error('目录格式无效，请选择发布包中的新版课程目录或旧版课次目录 JSON。');
@@ -31,10 +55,12 @@ async function database(){
  return new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(new Error('浏览器未能打开目录存储，请重试。'));});
 }
 export async function importCatalog(data){
- const checked=validateCatalogImport(data),db=await database();
+ const checked=validateCatalogImport(data),current=await readImportedCatalog(checked.kind);
+ if(snapshotDate(current)&&(!snapshotDate(checked.data)||snapshotDate(checked.data)<snapshotDate(current)))throw new Error('这份目录比当前目录更旧或没有更新时间，请选择最新目录。');
+ const db=await database();
  try{await new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite'),store=tx.objectStore(STORE);let reason;
   const previous=store.get(checked.kind);previous.onsuccess=()=>{
-   const date=value=>Date.parse(value?.generatedAt||value?.snapshot_date)||0,before=date(previous.result),after=date(checked.data);
+   const before=snapshotDate(previous.result),after=snapshotDate(checked.data);
    if(before&&(!after||after<before)){reason=new Error(after?'这份目录比已导入的目录更旧，请选择最新目录。':'目录没有有效更新时间，不能覆盖现有目录。');tx.abort();return;}
    try{store.put(checked.data,checked.kind);}catch{reason=new Error('目录未保存，原目录未更改。');tx.abort();}
   };
@@ -45,7 +71,7 @@ export async function importCatalog(data){
 }
 export async function readImportedCatalog(kind){
  if(typeof indexedDB==='undefined'||!globalThis.chrome?.runtime)return null;
- if(!cache.has(kind)){const flight=(async()=>{const db=await database();try{return await new Promise((resolve,reject)=>{const request=db.transaction(STORE).objectStore(STORE).get(kind);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(new Error('已导入目录暂时无法读取。'));});}finally{db.close();}})().catch(error=>{if(cache.get(kind)===flight)cache.delete(kind);throw error;});cache.set(kind,flight);}
+ if(!cache.has(kind)){const flight=(async()=>{const db=await database();let saved;try{saved=await new Promise((resolve,reject)=>{const request=db.transaction(STORE).objectStore(STORE).get(kind);request.onsuccess=()=>resolve(request.result||null);request.onerror=()=>reject(new Error('已导入目录暂时无法读取。'));});}finally{db.close();}return withBundledCatalog(kind,saved);})().catch(error=>{if(cache.get(kind)===flight)cache.delete(kind);throw error;});cache.set(kind,flight);}
  return cache.get(kind);
 }
 globalThis.chrome?.storage?.onChanged?.addListener((changes,area)=>{if(area==='local'&&changes['catalog:importRevision'])cache.clear();});
