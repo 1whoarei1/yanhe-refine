@@ -30,14 +30,8 @@ const getMediaApi=()=>playbackApi||api;
 const timely=new LiveFrameFollower(video,{active:()=>isLive()&&state.attached,onUpdate:({latest})=>{const text=latest?'最新缓存帧':'正在更新画面';if($('timely-status').textContent!==text)$('timely-status').textContent=text;}});
 const multi=mountMultiview({video,getApi:getMediaApi,getInfo:()=>state.info,getView:()=>state.view,onViewChange:selectView,getHls:()=>state.hls,isLive,isAttached:()=>state.attached,isConnecting:()=>state.connecting,getTimely:()=>timely.enabled,blockedViews:state.blockedViews,onStatus:playbackStatus,onBlocked:audioBlocked});
 const updateDual=()=>multi.refresh();
-$('copy-playback-diagnostics').addEventListener('click',async()=>{
- let tabAudio=null;try{const tab=await chrome.tabs.getCurrent();tabAudio={muted:tab?.mutedInfo?.muted??null,reason:tab?.mutedInfo?.reason||null,audible:tab?.audible??null};}catch{}
- const report={schema:1,version:chrome.runtime.getManifest().version,tabAudio,course:state.course?{platform:state.course.legacy?'legacy':'modern',id:String(state.course.id),lessonId:state.selected?.id}:null,liveTarget:state.liveTarget||null,signInMode:timely.enabled,blockedViews:[...state.blockedViews],autoplayAllowed:(document.permissionsPolicy||document.featurePolicy)?.allowsFeature?.('autoplay')??null,...multi.diagnostics()};
- const text=JSON.stringify(report,null,2);try{await navigator.clipboard.writeText(text);$('diagnostics-status').textContent='声音诊断已复制';}catch{$('playback-diagnostics').value=text;$('playback-diagnostics').hidden=false;$('playback-diagnostics').focus();$('playback-diagnostics').select();$('diagnostics-status').textContent='可复制下方声音诊断内容';}
-});
-
-const liveLinks=mountLiveLinks({getContext:()=>({course:state.course,lecture:state.selected,api,live:state.selected?.mode==='live'||isLive()}),onSwitch:async({api:nextApi,target,info})=>{
- const playing=state.attached&&!video.paused;clearMedia();multi.clearAudio();playbackApi?.reset();playbackApi=nextApi;state.liveTarget=target;state.info=info;state.blockedViews.clear();
+const liveLinks=mountLiveLinks({getContext:()=>({course:state.course,lecture:state.selected,info:state.info,api,live:state.selected?.mode==='live'||isLive()}),onChoose:()=>controls.openLiveSources(),onSwitch:async({api:nextApi,target,info})=>{
+ controls.close();const playing=state.attached&&!video.paused;clearMedia();multi.clearAudio();playbackApi?.reset();playbackApi=nextApi;state.liveTarget=target;state.info=info;state.blockedViews.clear();
  if(!info.streams[state.view])state.view=info.streams.classroom?'classroom':Object.keys(info.streams)[0];updateViews();updateTimelyControls();void connectPlayback(0,{play:playing});
 }});
 
@@ -45,7 +39,7 @@ $('timely-mode').addEventListener('click',()=>{timely.setEnabled(!timely.enabled
 function audioBlocked(text,playBlocked=false){$('control-volume').setAttribute('data-audio-blocked','true');if(playBlocked)$('control-volume').setAttribute('data-play-blocked','true');playbackStatus(text,true);}
 function updateTimelyControls(){const enabled=isLive();$('timely-mode').hidden=!enabled;$('timely-mode').setAttribute('aria-pressed',String(timely.enabled));$('timely-status').hidden=!enabled||!timely.enabled;if(enabled&&timely.enabled)$('timely-status').textContent='等待最新缓存';timely.request();}
 mountViewerLayout({onError:text=>playbackStatus(text,true)});
-mountPlayerControls({video,getContext:()=>({live:isLive(),attached:state.attached,duration:state.info?.duration,signIn:isLive()&&timely.enabled}),onPlay:()=>{state.lastRecovery=0;return connectPlayback(state.resume);},onSound:()=>multi.enableSound({play:$('control-volume').hasAttribute('data-play-blocked')}),onStatus:playbackStatus});
+const controls=mountPlayerControls({video,getContext:()=>({live:isLive(),attached:state.attached,duration:state.info?.duration,signIn:isLive()&&timely.enabled}),onPlay:()=>{state.lastRecovery=0;return connectPlayback(state.resume);},onSound:()=>multi.enableSound({play:$('control-volume').hasAttribute('data-play-blocked')}),onStatus:playbackStatus});
 const captions=mountVideoCaptions({video,enabled:()=>state.attached&&$('show-captions').checked&&!liveContext(),getText:time=>state.subtitles[cuePosition(time).index]?.text||''});
 const views = ['screen','classroom','student'];
 function isLive() { return state.info?.mode === 'live'; }
@@ -309,7 +303,7 @@ async function selectLecture(lecture) {
     document.querySelector('.workspace').classList.toggle('live-mode',Boolean(liveContext()));
     $('speed').disabled = Boolean(liveContext()); $('go-live').hidden = !isLive();updateTimelyControls();void liveLinks.refresh();
     if (liveContext()) {
-      $('duration').textContent = liveLabels[info.mode];
+      $('duration').textContent = isLive() ? '' : liveLabels[info.mode];
       $('subtitle-list').replaceChildren(textNode('p','直播暂无字幕','empty'));
       if (!isLive() || !Object.keys(info.streams).length) {
         $('stage-label').textContent = info.mode === 'upcoming' ? '直播尚未开始' : info.mode === 'ended' ? '直播已结束' : '直播源暂未就绪';

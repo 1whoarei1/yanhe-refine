@@ -65,6 +65,21 @@ export class YanheApi {
     return { id, title: String(data.title || '课程回放'), teacher: String(data.realname || ''), term: String(data.term_name || ''),college:data.kkxy_name||'',code:data.course_code||'',lmsId:data.zhiyuan_id||'', replays: replayRows(data.sub_list), lives: liveRows(data.sub_list) };
     },{...options,signal});
   }
+  async daySchedule(day, signal) {
+    await this.authenticate({signal});
+    const body=await this.json('/courseapi/v2/course-live/get-my-course-day',{day},{signal});
+    return Object.values(body.list||{}).flatMap(group=>Array.isArray(group.course)?group.course:[]);
+  }
+  async currentLives(day, signal) {
+    const rows=await this.daySchedule(day,signal),found=new Map();
+    for(const row of rows){
+      const id=String(row.course_id||row.id||''),subId=String(row.sub_id||'');
+      if(!/^\d{1,12}$/.test(id)||!/^\d{1,12}$/.test(subId)||row.sub_type!=='course_live'||String(row.sub_status)!=='1')continue;
+      found.set(id+':'+subId,{id,subId,legacy:false,title:String(row.title||''),teacher:String(row.realname||row.lecturer_name||''),term:String(row.term_name||''),
+        info:{mode:'live',start:row.course_begin||row.xstream_begin,end:row.course_over||row.xstream_end}});
+    }
+    return [...found.values()];
+  }
   async livePagePermission(courseId, subId, signal) {
     if (!/^\d{1,12}$/.test(String(courseId)) || !/^\d{1,12}$/.test(String(subId))) throw new Error('直播课程或课次 ID 无效。');
     await this.authenticate({ signal });
@@ -80,10 +95,11 @@ export class YanheApi {
     await this.authenticate({ signal });
     const { data } = await this.json('/courseapi/v3/portal-home-setting/get-sub-info', { course_id: courseId, sub_id: subId }, { signal });
     if (!data) throw new Error('该课次尚无视频信息。');
+    if(data.course_id!=null&&String(data.course_id)!==String(courseId)||data.sub_id!=null&&String(data.sub_id)!==String(subId))throw new Error('直播或回放的所属课次不一致，请重新读取课程。');
     const mode = lectureMode(data);
     if (mode === 'live' || mode === 'upcoming') {
       const pagePermission = await this.livePagePermission(courseId,subId,signal);
-      return { duration: 0, mode, pagePermission, title: String(data.sub_title || ''), start: Number(data.start_at) || 0,
+      return { duration: 0, mode, pagePermission, title: String(data.sub_title || ''), start: Number(data.start_at) || 0, end: Number(data.end_at) || 0,
         ...(mode === 'live' ? liveStreams(data) : { streams: {}, candidates: {} }) };
     }
     return { ...streamsFrom(data), mode, title: String(data.sub_title || '') };

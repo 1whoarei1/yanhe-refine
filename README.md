@@ -2,14 +2,15 @@
 
 在新版、旧版延河课堂中，一站查看课程、直播、回放、资料和待办。支持 Edge / Chrome。
 
-[下载插件 1.10.1](https://github.com/bitoolkit/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/bitoolkit/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
+[下载插件 1.10.2](https://github.com/bitoolkit/yanhe-refine/releases/latest) · [下载旧版课次目录](https://github.com/bitoolkit/yanhe-refine/releases/latest/download/legacy-session-index.json) · [更新记录](CHANGELOG.md)
 
-**1.10.1 推荐更新。** 修复仓库迁移后的更新检查与下载链接。旧版用户请手动更新一次。
+**1.10.2 重要更新。** 修复直播 403，新增新旧站直播自动识别与切换。
 
 ## 功能
 
 - 搜索课程、教师或粘贴课程链接，查找往年回放。
 - 双画面观看；直播支持三画面，左侧主画面、右侧上下两路。声音来源单独选择。
+- 自动识别新旧站同堂直播，右上角查看当前来源并切换。
 - 倍速、字幕、音量、网页全屏和屏幕全屏；侧栏、课次栏与字幕表可收起。
 - 汇总新旧乐学的资料与待办，按学期筛选；视频下载在独立标签页进行。
 - 签到模式显示最新缓存画面，不自动签到；可随时切回原站。

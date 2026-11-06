@@ -82,7 +82,7 @@ export function legacyLive(data,now=Date.now()) {
    if(format){streams[view]=url.href;candidates[view]=[{url:url.href,format}];}
   }catch{}
  }
- return {mode,title:String(data.title||'旧版直播'),start,duration:0,streams,candidates};
+ return {mode,title:String(data.title||'旧版直播'),start,end,duration:0,streams,candidates};
 }
 export function legacyLiveSignedUrl(raw,token,hash){
  const url=mediaUrl(raw);

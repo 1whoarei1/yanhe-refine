@@ -5,7 +5,7 @@ import {join} from 'node:path';
 // escape Playwright routing, so fail renewal locally instead of visiting a school.
 // The recovery implementation is exercised separately with unit and localhost tests.
 export async function installSignedOutRecoveryFixture(extension){
- await writeFile(join(extension,'signed-out-recovery-fixture.js'),`
+ const fixture=`
 const createTab=chrome.tabs.create.bind(chrome.tabs);
 const renewalOrigins=['https://aita.yanhekt.cn','https://www.yanhekt.cn','https://lexue.bit.edu.cn','https://zy-eclass.bit.edu.cn'];
 chrome.tabs.create=async options=>{
@@ -14,6 +14,10 @@ chrome.tabs.create=async options=>{
  }
  return createTab(options);
 };
-`);
+`;
+ await writeFile(join(extension,'signed-out-recovery-fixture.js'),fixture);
  const path=join(extension,'background.js');await writeFile(path,"import './signed-out-recovery-fixture.js';\n"+await readFile(path,'utf8'));
+ const player=join(extension,'watch','player.js');
+ await writeFile(join(extension,'watch','signed-out-recovery-fixture.js'),fixture);
+ await writeFile(player,"import './signed-out-recovery-fixture.js';\n"+await readFile(player,'utf8'));
 }

@@ -31,8 +31,8 @@ export class PlatformApi extends YanheApi {
   return {total:Number(data.total)||0,rows:data.list.map(r=>normalizeCourse(r,'modern')).filter(Boolean)};
  }
  async today(day){
-  await this.authenticate();const body=await this.json('/courseapi/v2/course-live/get-my-course-day',{day});const rows=new Map();
-  for(const group of Object.values(body.list||{}))for(const raw of group.course||[]){
+  const schedule=await this.daySchedule(day),rows=new Map();
+  for(const raw of schedule){
    const course=normalizeCourse({...raw,id:raw.course_id||raw.id},'modern');if(!course)continue;
    const subId=text(raw.sub_id);if(!/^\d{1,12}$/.test(subId))continue;
    rows.set(`${course.key}:${subId}`,{...course,subId,subTitle:text(raw.sub_title),start:schoolEpoch(raw.course_begin||raw.xstream_begin),end:schoolEpoch(raw.course_over||raw.xstream_end),room:text(raw.room_name),status:text(raw.sub_status)});

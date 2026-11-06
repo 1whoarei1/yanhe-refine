@@ -138,6 +138,25 @@ export class LegacyYanheApi extends YanheApi {
   async describeCourse(id,signal){
     await this.authenticate({signal});return this.courseMetadata(id,[],signal);
   }
+  async currentLives(_day,signal){
+    await this.authenticate({signal});const found=new Map();
+    for(let page=1;page<=30;page++){
+      const {data}=await this.json('/v2/live/list',{page,page_size:100,user_relationship_type:1},{signal});
+      const rows=Array.isArray(data)?data:data?.data;
+      if(!Array.isArray(rows))throw new Error('旧站未返回有效的我的直播列表。');
+      for(const row of rows){
+        const id=String(row.source_id||row.course?.id||''),liveId=String(row.id||''),info=legacyLive(row);
+        if(!validId(id)||!validId(liveId)||info.mode!=='live')continue;
+        if(row.course?.id!=null&&String(row.course.id)!==id)continue;
+        found.set(liveId,{id,liveId,legacy:true,title:String(row.course?.name_zh||row.title||''),teacher:(row.course?.professors||[]).map(p=>p.name).filter(Boolean).join('、'),
+          term:[row.course?.school_year,row.course?.semester].filter(Boolean).join('-'),info});
+      }
+      signal?.throwIfAborted();
+      const lastPage=Number(data?.last_page);
+      if(!rows.length||(lastPage>0?page>=lastPage:rows.length<100))return [...found.values()];
+    }
+    throw new Error('旧站我的直播超过分页限制，请在原站查看。');
+  }
   async liveList(id,signal){
     const {data}=await this.json('/v2/live/list',{source_id:id,page:1,page_size:100},{signal});
     const rows=Array.isArray(data)?data:data?.data;if(!Array.isArray(rows))throw new Error('旧站未返回有效直播列表');

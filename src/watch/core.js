@@ -56,11 +56,12 @@ export function mediaUrl(raw) {
 
 export function signedUrl(raw, profile, hash, now = Math.floor(Date.now() / 1000)) {
   const url = mediaUrl(raw);
-  if (url.pathname.startsWith('/play/')) {
+  if (url.pathname.startsWith('/play/') || url.pathname.startsWith('/live/')) {
     if (profile?.id == null || profile.tenant_id == null || profile.phone == null) throw new Error('登录信息不完整，请在延河课堂重新登录。');
     const user = String(profile.id);
     const digest = hash(url.pathname + user + String(profile.tenant_id) + [...String(profile.phone)].reverse().join('') + now);
-    url.search = new URLSearchParams({ t: `${user}-${now}-${digest}` }).toString();
+    // Live gateways use the replay signature and still need their routing parameters.
+    url.searchParams.set('t', `${user}-${now}-${digest}`);
   }
   return url.href;
 }

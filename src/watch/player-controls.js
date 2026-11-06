@@ -106,5 +106,8 @@ export function mountPlayerControls({video,getContext,onPlay,onSound,onStatus}){
  observer.observe($('control-volume'),{attributes:true,attributeFilter:['data-audio-blocked']});
  const resize=new ResizeObserver(()=>{$('menu-volume').style.height=Math.min(155,Math.max(80,surface.clientHeight-62))+'px';positionSettings();});resize.observe(surface);
  update();window.addEventListener('pagehide',()=>{destroyed=true;clearTimeout(timer);clearTimeout(volumeTimer);observer.disconnect();resize.disconnect();});
- return {close:()=>setMenu(null)};
+ return {close:()=>setMenu(null),openLiveSources(){
+  setMenu('settings');setSettingsPage('more');$('live-platform-tools').open=true;positionSettings();
+  ($('live-course-candidate').hidden?$('alternate-live-url'):$('live-course-candidate')).focus({preventScroll:true});
+ }};
 }

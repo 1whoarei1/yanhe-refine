@@ -58,7 +58,6 @@
 #menu-settings .live-platform-tools select,#menu-settings .live-platform-tools input{width:100%;max-width:100%}
 #menu-settings .live-platform-tools p{margin:6px 0;color:#aebfc3;font-size:12px;line-height:1.5}
 #menu-settings .live-platform-tools button{font-size:12px;padding:6px 0;text-align:left;min-height:32px;color:#addfe0}
-#menu-settings #playback-diagnostics{color:#fff;background:#293335;min-height:100px;width:100%}
 #menu-settings .settings-warning{color:#f3cb8a;font-size:12px;line-height:1.5;margin:2px 0 6px}
 #menu-settings .sr-only{margin:0;min-height:0}
 @media(pointer:coarse){#menu-settings .settings-row,#menu-settings .settings-toggle,#menu-settings .settings-more-open{min-height:44px}#menu-settings select{font-size:16px}#menu-settings .view-slot select{font-size:14px}}
